@@ -1,26 +1,189 @@
-@import "tailwindcss";
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --foreground-rgb: 51, 51, 51;
+  --background-rgb: 248, 249, 250;
+  --toss-blue-light: 235, 244, 255;
+  --toss-blue: 0, 123, 255;
+  --toss-blue-dark: 0, 103, 214;
+  --toss-error: 255, 78, 78;
+  --toss-gray-light: 240, 241, 242;
+  --toss-gray: 217, 219, 224;
+  --toss-gray-dark: 153, 153, 153;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  color: rgb(var(--foreground-rgb));
+  background: rgb(var(--background-rgb));
+  line-height: 1.5;
+  letter-spacing: -0.3px;
+}
+
+@layer components {
+  /* 토스 스타일 버튼 */
+  .btn-primary {
+    @apply bg-[#0F6FFF] text-white py-4 px-4 rounded-xl font-medium w-full hover:bg-[#0051d4] transition-colors duration-200 text-center;
+  }
+  
+  .btn-secondary {
+    @apply bg-[rgb(var(--toss-gray-light))] text-[#333] py-4 px-4 rounded-xl font-medium w-full hover:bg-[#e5e6e7] transition-colors duration-200 text-center;
+  }
+  
+  .btn-disabled {
+    @apply bg-[#e5e6e7] text-[#999] py-4 px-4 rounded-xl font-medium w-full cursor-not-allowed text-center;
+  }
+  
+  /* 토스 스타일 네비게이션 링크 */
+  .nav-link {
+    @apply px-3 py-2 text-[#333] hover:text-[#0F6FFF] transition-colors duration-200;
+  }
+  
+  /* 컨테이너 */
+  .container-custom {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+  
+  /* 토스 스타일 입력 필드 */
+  .form-input {
+    @apply w-full p-4 border border-[#e5e6e7] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#0F6FFF] focus:border-transparent text-[#333] text-base;
+  }
+  
+  .form-input-error {
+    @apply w-full p-4 border border-[#FF4E4E] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#FF4E4E] focus:border-transparent text-[#333] text-base;
+  }
+  
+  .form-label {
+    @apply block text-[#333] text-base font-medium mb-2;
+  }
+  
+  /* 토스 스타일 카드 */
+  .toss-card {
+    @apply bg-white rounded-2xl shadow-sm border border-[#f2f2f2] p-5;
+  }
+  
+  /* 토스 스타일 알림 메시지 */
+  .toss-alert-error {
+    @apply bg-[#FFF5F5] border border-[#FFDFDF] text-[#FF4E4E] px-4 py-3 rounded-xl mb-4 flex items-start;
+  }
+  
+  .toss-alert-success {
+    @apply bg-[#F5FFFA] border border-[#DFFFEF] text-[#00B050] px-4 py-3 rounded-xl mb-4 flex items-start;
+  }
+  
+  .toss-alert-info {
+    @apply bg-[#F5F9FF] border border-[#DFEDFF] text-[#0F6FFF] px-4 py-3 rounded-xl mb-4 flex items-start;
+  }
+  
+  /* 토스 스타일 체크박스 */
+  .toss-checkbox {
+    @apply h-5 w-5 text-[#0F6FFF] rounded border-gray-300 focus:ring-[#0F6FFF];
+  }
+  
+  /* 토스 스타일 파일 업로드 */
+  .toss-file-upload {
+    @apply border-2 border-dashed border-[#e5e6e7] rounded-xl p-6 text-center cursor-pointer hover:border-[#0F6FFF] transition-colors duration-200;
+  }
+  /* 토스 스타일 카드 */
+.toss-card {
+  @apply bg-white rounded-lg shadow-sm overflow-hidden;
+}
+
+/* 토스 스타일 알림 */
+.toss-alert-error {
+  @apply flex items-start p-4 rounded-lg bg-red-50 border border-red-200 text-red-700;
+}
+
+.toss-alert-success {
+  @apply flex items-start p-4 rounded-lg bg-green-50 border border-green-200 text-green-700;
+}
+
+.toss-alert-info {
+  @apply flex items-start p-4 rounded-lg bg-blue-50 border border-blue-200 text-blue-700;
+}
+
+/* 토스 스타일 버튼 */
+.btn-primary {
+  @apply px-4 py-2 bg-blue-500 text-white rounded-lg font-medium hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors;
+}
+
+.btn-secondary {
+  @apply px-4 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors;
+}
+
+/* 토스 스타일 폼 */
+.form-label {
+  @apply block text-gray-700 font-medium mb-2;
+}
+
+.form-input {
+  @apply w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors;
+}
+
+.form-input-error {
+  @apply w-full px-4 py-2 border border-red-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors;
+}
+
+/* 토스 스타일 파일 업로드 */
+.toss-file-upload {
+  @apply border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-blue-500 transition-colors;
+}
+
+/* 토스 스타일 로딩 스피너 */
+.toss-spinner {
+  @apply animate-spin rounded-full border-t-2 border-b-2 border-blue-500;
+}
+
+/* 프로즈 스타일 (마크다운 렌더링) */
+.prose {
+  @apply text-gray-800 leading-relaxed;
+}
+
+.prose h1 {
+  @apply text-2xl font-bold mt-6 mb-4;
+}
+
+.prose h2 {
+  @apply text-xl font-bold mt-5 mb-3;
+}
+
+.prose h3 {
+  @apply text-lg font-bold mt-4 mb-2;
+}
+
+.prose p {
+  @apply mb-4;
+}
+
+.prose ul {
+  @apply list-disc pl-5 mb-4;
+}
+
+.prose ol {
+  @apply list-decimal pl-5 mb-4;
+}
+
+.prose a {
+  @apply text-blue-600 hover:underline;
+}
+
+.prose img {
+  @apply max-w-full h-auto rounded my-4;
+}
+
+.prose blockquote {
+  @apply pl-4 border-l-4 border-gray-300 text-gray-600 italic my-4;
+}
+
+/* 컨테이너 */
+.container-custom {
+  @apply max-w-7xl;
+}
 }
