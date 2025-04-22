@@ -1,4 +1,3 @@
-// app/auth/register/page.tsx
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
@@ -129,25 +128,47 @@ export default function Register() {
     }, 500);
   };
   
-  // 이메일 중복 확인 함수
+  // 이메일 중복 확인 함수 - 서버 API 사용
   const checkEmailAvailability = async (emailToCheck: string) => {
     try {
-      // 더 간단한 방법으로 중복 확인 시도 (OTP로 로그인 시도)
-      const { error: otpError } = await supabase.auth.signInWithOtp({
-        email: emailToCheck,
+      setIsCheckingEmail(true);
+      
+      console.log('이메일 중복 확인 요청:', emailToCheck);
+      
+      // 서버 측 API를 통해 이메일 중복 확인
+      const response = await fetch('/api/auth/check-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email: emailToCheck }),
       });
       
-      // 이메일이 이미 등록되었는지 확인
-      if (otpError && otpError.message.includes('already registered')) {
-        setEmailAvailable(false);
-        setErrors(prev => ({ ...prev, email: '이미 등록된 이메일입니다' }));
+      const data = await response.json();
+      console.log('이메일 중복 확인 응답:', data);
+      
+      if (response.ok) {
+        if (data.exists === true) {
+          // 이메일이 이미 존재함
+          console.log('이메일이 이미 존재합니다');
+          setEmailAvailable(false);
+          setErrors(prev => ({ ...prev, email: '이미 등록된 이메일입니다' }));
+        } else {
+          // 이메일이 존재하지 않음
+          console.log('이메일 사용 가능');
+          setEmailAvailable(true);
+          setErrors(prev => ({ ...prev, email: '' }));
+        }
       } else {
-        setEmailAvailable(true);
+        // API 오류 발생
+        console.error('이메일 확인 API 오류:', data.error);
+        setEmailAvailable(null);
+        setErrors(prev => ({ ...prev, email: '이메일 확인 중 오류가 발생했습니다' }));
       }
     } catch (err) {
-      console.error('이메일 중복 확인 오류:', err);
-      // 오류 발생 시 진행 허용 (가입 시 Supabase가 검증함)
-      setEmailAvailable(true);
+      console.error('이메일 중복 확인 처리 오류:', err);
+      setEmailAvailable(null);
+      setErrors(prev => ({ ...prev, email: '서버 연결 중 오류가 발생했습니다' }));
     } finally {
       setIsCheckingEmail(false);
     }

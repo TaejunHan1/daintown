@@ -16,11 +16,11 @@ export async function POST(request: NextRequest) {
     const requestData = await request.json();
     console.log('요청 받은 데이터:', requestData);
     
-    const { signatureId, postId, userId, signatureData, userType, voteType } = requestData;
+    const { postId, userId, signatureData, userType, voteType, storeId, signatureId } = requestData;
 
     // 필수 데이터 확인
-    if (!signatureId || !postId || !userId || !signatureData || !userType) {
-      console.error('필수 필드 누락:', { signatureId, postId, userId, userType });
+    if (!postId || !userId || !signatureData || !userType || !storeId || !signatureId) {
+      console.error('필수 필드 누락:', { postId, userId, userType, storeId, signatureId });
       return NextResponse.json(
         { error: '필수 정보가 누락되었습니다.' },
         { status: 400 }
@@ -58,62 +58,84 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 기존 서명 존재 확인
+    // 기존 서명이 존재하는지 확인
     const { data: existingSignature, error: signatureCheckError } = await supabaseAdmin
       .from('merchant_association_signatures')
-      .select('id, user_id')
+      .select('id')
       .eq('id', signatureId)
-      .single();
+      .eq('user_id', userId)
+      .maybeSingle();
 
     if (signatureCheckError) {
       console.error('기존 서명 확인 오류:', signatureCheckError);
       return NextResponse.json(
-        { error: '수정할 서명을 찾을 수 없습니다.', details: signatureCheckError.message },
+        { error: '서명 확인 중 오류가 발생했습니다.', details: signatureCheckError.message },
+        { status: 500 }
+      );
+    } else if (!existingSignature) {
+      return NextResponse.json(
+        { error: '수정할 서명을 찾을 수 없습니다.' },
         { status: 404 }
       );
     }
-
-    // 서명 소유자 확인
-    if (existingSignature.user_id !== userId) {
-      return NextResponse.json(
-        { error: '본인의 서명만 수정할 수 있습니다.' },
-        { status: 403 }
-      );
+    
+    // 매장 정보 가져오기
+    const { data: storeData, error: storeError } = await supabaseAdmin
+      .from('stores')
+      .select('name, floor, unit_number')
+      .eq('id', storeId)
+      .single();
+      
+    if (storeError) {
+      console.error('매장 정보 조회 오류:', storeError);
     }
+    
+    // 매장 정보 JSON 객체 생성
+    const storeInfo = storeData ? {
+      store_id: storeId,
+      store_name: storeData.name,
+      floor: storeData.floor,
+      unit_number: storeData.unit_number
+    } : { 
+      store_id: storeId,
+      store_name: `${userType === 'landlord' ? '임대인' : '임차인'} 매장`,
+      floor: '',
+      unit_number: ''
+    };
 
-    // 서명 수정
+    // 서명 업데이트
     try {
-      console.log('서명 수정 시도');
-      const { data: updatedSignature, error: updateError } = await supabaseAdmin
+      console.log('서명 업데이트 시도');
+      const { data: signature, error: signatureError } = await supabaseAdmin
         .from('merchant_association_signatures')
         .update({
           signature_data: signatureData,
           user_type: userType,
           vote_type: voteType || null,
-          // 수정 일자는 기존 created_at을 유지하고 별도의 updated_at 필드가 있으면 그것을 사용
+          store_info: storeInfo
         })
         .eq('id', signatureId)
         .select('id')
         .single();
 
-      if (updateError) {
-        console.error('서명 수정 오류:', updateError);
+      if (signatureError) {
+        console.error('서명 업데이트 오류:', signatureError);
         return NextResponse.json(
-          { error: '서명 수정 중 오류가 발생했습니다.', details: updateError.message },
+          { error: '서명 업데이트 중 오류가 발생했습니다.', details: signatureError.message },
           { status: 500 }
         );
       }
 
-      console.log('서명 수정 성공:', updatedSignature?.id);
+      console.log('서명 업데이트 성공:', signature?.id);
       return NextResponse.json({ 
         success: true, 
-        message: '서명이 성공적으로 수정되었습니다.',
-        id: updatedSignature?.id || signatureId
+        message: '서명이 성공적으로 업데이트되었습니다.',
+        id: signature?.id
       });
-    } catch (updateError) {
-      console.error('서명 수정 중 예외 발생:', updateError);
+    } catch (updatingError) {
+      console.error('서명 업데이트 중 예외 발생:', updatingError);
       return NextResponse.json(
-        { error: '서명 수정 중 오류가 발생했습니다.' },
+        { error: '서명 업데이트 중 오류가 발생했습니다.' },
         { status: 500 }
       );
     }

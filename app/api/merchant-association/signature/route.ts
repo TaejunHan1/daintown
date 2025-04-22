@@ -16,19 +16,16 @@ export async function POST(request: NextRequest) {
     const requestData = await request.json();
     console.log('요청 받은 데이터:', requestData);
     
-    const { postId, userId, signatureData, userType, voteType } = requestData;
+    const { postId, userId, signatureData, userType, voteType, storeId } = requestData;
 
     // 필수 데이터 확인
-    if (!postId || !userId || !signatureData || !userType) {
-      console.error('필수 필드 누락:', { postId, userId, userType });
+    if (!postId || !userId || !signatureData || !userType || !storeId) {
+      console.error('필수 필드 누락:', { postId, userId, userType, storeId });
       return NextResponse.json(
         { error: '필수 정보가 누락되었습니다.' },
         { status: 400 }
       );
     }
-
-    // 인증 요구 제거 (401 오류 방지)
-    // 서비스 롤 키를 사용하므로 별도의 인증 과정 없이 진행
 
     // 게시글 존재 확인
     const { data: post, error: postError } = await supabaseAdmin
@@ -77,16 +74,25 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-
-    // 테이블 존재 확인 및 생성
-    try {
-      console.log('서명 테이블 확인 및 생성 시도');
-      const tableExists = await checkAndCreateTable();
-      console.log('서명 테이블 존재 여부:', tableExists);
-    } catch (tableError) {
-      console.error('테이블 확인/생성 오류:', tableError);
-      // 테이블 오류가 있어도 계속 진행
+    
+    // 매장 정보 가져오기
+    const { data: storeData, error: storeError } = await supabaseAdmin
+      .from('stores')
+      .select('name, floor, unit_number')
+      .eq('id', storeId)
+      .single();
+      
+    if (storeError) {
+      console.error('매장 정보 조회 오류:', storeError);
     }
+    
+    // 매장 정보 JSON 객체 생성
+    const storeInfo = storeData ? {
+      store_id: storeId,
+      store_name: storeData.name,
+      floor: storeData.floor,
+      unit_number: storeData.unit_number
+    } : { store_id: storeId };
 
     // 서명 저장
     try {
@@ -99,19 +105,13 @@ export async function POST(request: NextRequest) {
           signature_data: signatureData,
           user_type: userType,
           vote_type: voteType || null,
+          store_info: storeInfo
         })
         .select('id')
         .single();
 
       if (signatureError) {
         console.error('서명 저장 오류:', signatureError);
-        
-        // SQL 오류 코드 확인
-        if (signatureError.code === '42P01') {
-          console.log('테이블이 존재하지 않음');
-          return createDummySuccessResponse();
-        }
-        
         return NextResponse.json(
           { error: '서명 저장 중 오류가 발생했습니다.', details: signatureError.message },
           { status: 500 }
@@ -122,11 +122,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ 
         success: true, 
         message: '서명이 성공적으로 저장되었습니다.',
-        id: signature?.id || '00000000-0000-0000-0000-000000000001'
+        id: signature?.id
       });
     } catch (savingError) {
       console.error('서명 저장 중 예외 발생:', savingError);
-      return createDummySuccessResponse();
+      return NextResponse.json(
+        { error: '서명 저장 중 오류가 발생했습니다.' },
+        { status: 500 }
+      );
     }
   } catch (err: any) {
     console.error('API 최상위 오류:', err);
@@ -168,6 +171,141 @@ async function checkAndCreateTable() {
   } catch (error) {
     console.error('테이블 확인/생성 과정에서 예외 발생:', error);
     return false;
+  }
+}
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const postId = params.id;
+    
+    if (!postId) {
+      return NextResponse.json(
+        { error: '게시글 ID가 필요합니다.' },
+        { status: 400 }
+      );
+    }
+
+    // 게시글 존재 확인
+    const { data: post, error: postError } = await supabaseAdmin
+      .from('merchant_association_posts')
+      .select('*')
+      .eq('id', postId)
+      .single();
+
+    if (postError) {
+      console.error('게시글 조회 오류:', postError);
+      return NextResponse.json(
+        { error: '게시글을 찾을 수 없습니다.' },
+        { status: 404 }
+      );
+    }
+    
+    // 서명 데이터 조회
+    const { data: signatures, error: signaturesError } = await supabaseAdmin
+      .from('merchant_association_signatures')
+      .select(`
+        id, 
+        post_id, 
+        user_id, 
+        signature_data, 
+        user_type, 
+        vote_type, 
+        created_at, 
+        store_info,
+        visibility_vote,
+        profiles(name),
+        names(name)
+      `)
+      .eq('post_id', postId)
+      .order('created_at', { ascending: false });
+
+    if (signaturesError) {
+      console.error('서명 조회 오류:', signaturesError);
+      return NextResponse.json(
+        { error: '서명 정보를 불러오는 중 오류가 발생했습니다.' },
+        { status: 500 }
+      );
+    }
+
+    // 가시성 투표 계산
+    const visibilityVotes = signatures.map(sig => sig.visibility_vote);
+    const publicVotes = visibilityVotes.filter(vote => vote === true).length;
+    const privateVotes = visibilityVotes.filter(vote => vote === false).length;
+    
+    // 공개 투표가 비공개 투표보다 많아야만 공개 (같거나 적으면 비공개)
+    const isPublic = publicVotes > privateVotes;
+    console.log(`서명 공개 상태: ${isPublic ? '공개' : '비공개'} (공개: ${publicVotes}, 비공개: ${privateVotes})`);
+
+    // 서명 정보 처리
+    const processedSignatures = signatures.map(signature => {
+      // 사용자 이름 설정
+      const userName = (signature.profiles && Array.isArray(signature.profiles) && signature.profiles.length > 0) 
+      ? signature.profiles[0].name 
+      : '사용자';      
+      // 기본 서명 정보 (항상 포함됨)
+      const baseSignature = {
+        id: signature.id,
+        post_id: signature.post_id,
+        user_id: signature.user_id,
+        created_at: signature.created_at,
+        visibility_vote: signature.visibility_vote,
+      };
+      
+      // 비공개인 경우, 민감한 정보 마스킹 처리
+      if (!isPublic) {
+        return {
+          ...baseSignature,
+          user_name: userName, // 사용자 이름은 항상 표시
+          user_type: signature.user_type, // 사용자 유형은 항상 표시
+          vote_type: null, // 찬성/반대 여부 마스킹
+          signature_data: null, // 서명 데이터 마스킹
+          store_info: { 
+            // 매장 기본 정보만 표시
+            store_name: typeof signature.store_info === 'string' 
+              ? JSON.parse(signature.store_info).store_name 
+              : signature.store_info?.store_name || '비공개 매장',
+            // 기타 상세 정보 제거
+            floor: null,
+            unit_number: null
+          },
+          is_masked: true // 마스킹 여부 표시
+        };
+      }
+      
+      // 공개인 경우 모든 정보 포함
+      return {
+        ...baseSignature,
+        user_name: userName,
+        user_type: signature.user_type,
+        vote_type: signature.vote_type,
+        signature_data: signature.signature_data,
+        store_info: signature.store_info,
+        is_masked: false
+      };
+    });
+
+    // 투표 요약 정보도 같이 반환 (프론트엔드에서 활용)
+    const votingSummary = {
+      totalSignatures: signatures.length,
+      publicVotes,
+      privateVotes,
+      totalVotes: publicVotes + privateVotes,
+      isPublic
+    };
+
+    return NextResponse.json({
+      signatures: processedSignatures,
+      votingSummary
+    });
+  } catch (err) {
+    console.error('API 오류:', err);
+    return NextResponse.json(
+      { error: '서버 오류가 발생했습니다.' },
+      { status: 500 }
+    );
   }
 }
 

@@ -12,7 +12,29 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId');
+    const countOnly = searchParams.get('countOnly');
 
+    // countOnly 파라미터가 있으면 전체 사용자 수만 반환
+    if (countOnly === 'true') {
+      console.log('Fetching total user count');
+      
+      // profiles 테이블의 전체 사용자 수 조회
+      const { count, error } = await supabaseAdmin
+        .from('profiles')
+        .select('*', { count: 'exact', head: true });
+      
+      if (error) {
+        console.error('User count fetch error:', error);
+        return NextResponse.json(
+          { error: '사용자 수 조회 중 오류가 발생했습니다.', details: error.message },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({ count: count || 0 });
+    }
+
+    // userId 파라미터가 없으면 에러 반환
     if (!userId) {
       return NextResponse.json(
         { error: '사용자 ID가 필요합니다.' },
