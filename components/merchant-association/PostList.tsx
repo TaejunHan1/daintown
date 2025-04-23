@@ -190,9 +190,9 @@ export default function PostList({ posts, onRefresh }: PostListProps) {
 
   return (
     <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-      {/* 탭 메뉴 */}
-      <div className="border-b border-gray-100">
-        <div className="px-4 flex">
+      {/* 탭 메뉴 - 모바일에서는 스크롤 가능하게 */}
+      <div className="border-b border-gray-100 overflow-x-auto">
+        <div className="px-4 flex whitespace-nowrap min-w-max">
           <button
             className={`py-3 px-4 text-sm font-medium border-b-2 ${
               activeTab === 'all'
@@ -238,8 +238,8 @@ export default function PostList({ posts, onRefresh }: PostListProps) {
       </div>
 
       {/* 상단 정보 영역 */}
-      <div className="px-5 py-4 border-b border-gray-100 flex justify-between items-center">
-        <div>
+      <div className="px-4 py-3 sm:px-5 sm:py-4 border-b border-gray-100 flex flex-col sm:flex-row sm:justify-between sm:items-center">
+        <div className="mb-2 sm:mb-0">
           <h2 className="text-sm font-medium text-gray-900">게시글 목록</h2>
           <p className="text-xs text-gray-500 mt-0.5">총 {filteredPosts.length}개의 게시글</p>
         </div>
@@ -303,13 +303,14 @@ export default function PostList({ posts, onRefresh }: PostListProps) {
                 key={post.id}
                 className="block hover:bg-gray-50 transition-colors"
               >
-                <div className="px-5 py-4">
+                <div className="px-4 py-3 sm:px-5 sm:py-4">
                   <div className="flex flex-col">
-                    <div className="flex justify-between items-start">
+                    {/* 모바일 뷰를 위한 최적화된 레이아웃 */}
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start">
                       <div className="flex-1 min-w-0">
                         {/* 번호 + 제목 */}
                         <div className="flex items-start">
-                          <span className="flex-shrink-0 mr-3 text-gray-400 text-sm w-8 text-center">
+                          <span className="flex-shrink-0 mr-2 sm:mr-3 text-gray-400 text-sm w-6 sm:w-8 text-center">
                             {filteredPosts.length - (indexOfFirstPost + index)}
                           </span>
                           <h3 className={`text-sm font-medium ${isExpired ? 'text-gray-500' : 'text-gray-900'} line-clamp-2`}>
@@ -317,16 +318,21 @@ export default function PostList({ posts, onRefresh }: PostListProps) {
                           </h3>
                         </div>
                         
-                        {/* 메타 정보 */}
-                        <div className="mt-1.5 ml-11 flex items-center text-xs text-gray-500">
+                        {/* 모바일에서 만료일과 메타 정보를 함께 표시 */}
+                        <div className="mt-1.5 ml-8 sm:ml-11 flex flex-wrap items-center text-xs text-gray-500">
                           <span>{formatDate(post.created_at)}</span>
                           <span className="mx-1.5">•</span>
                           <span>조회 {post.views}</span>
+                          
+                          {/* 모바일에서는 여기에 만료일 표시 */}
+                          <div className="flex-shrink-0 mt-1 sm:hidden ml-auto">
+                            {formatExpiryStatus(post.expiry_date, post.hasExpired)}
+                          </div>
                         </div>
                       </div>
                       
-                      {/* 투표 만기일 + 화살표 */}
-                      <div className="flex items-center pl-4 ml-2">
+                      {/* 데스크탑에서만 보이는 투표 만기일 + 화살표 */}
+                      <div className="hidden sm:flex items-center pl-4 ml-2">
                         <div className="mr-2">
                           {formatExpiryStatus(post.expiry_date, post.hasExpired)}
                         </div>
@@ -338,10 +344,17 @@ export default function PostList({ posts, onRefresh }: PostListProps) {
                     
                     {/* 서명 요구사항 표시 */}
                     {(post.signature_required && !isExpired) && (
-                      <div className="ml-11 mt-2 flex flex-wrap">
+                      <div className="ml-8 sm:ml-11 mt-2 flex flex-wrap">
                         {formatSignatureTarget(post.signature_required, post.signature_target, !!isExpired)}
                       </div>
                     )}
+                    
+                    {/* 모바일용 작은 화살표 - 오른쪽으로 가기 */}
+                    <div className="sm:hidden mt-2 ml-8 flex justify-end">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </div>
                   </div>
                 </div>
               </Link>
@@ -350,14 +363,14 @@ export default function PostList({ posts, onRefresh }: PostListProps) {
         </div>
       )}
 
-      {/* 페이지네이션 */}
+      {/* 페이지네이션 - 모바일 최적화 */}
       {totalPages > 1 && (
-        <div className="px-5 py-4 flex justify-center border-t border-gray-100">
-          <div className="flex items-center">
+        <div className="px-4 py-3 sm:px-5 sm:py-4 flex justify-center border-t border-gray-100">
+          <div className="flex flex-wrap items-center justify-center">
             <button
               onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
               disabled={currentPage === 1}
-              className={`flex items-center px-3 py-1.5 rounded-md text-sm ${
+              className={`flex items-center px-2 sm:px-3 py-1.5 rounded-md text-sm ${
                 currentPage === 1 
                   ? 'text-gray-300 cursor-not-allowed' 
                   : 'text-gray-600 hover:bg-gray-100'
@@ -370,14 +383,14 @@ export default function PostList({ posts, onRefresh }: PostListProps) {
               이전
             </button>
             
-            <div className="flex mx-2">
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                // 표시할 페이지 범위 계산
-                let startPage = Math.max(1, currentPage - 2);
-                const endPage = Math.min(startPage + 4, totalPages);
+            <div className="flex mx-1 sm:mx-2">
+              {Array.from({ length: Math.min(3, totalPages) }, (_, i) => {
+                // 모바일에서는 페이지 버튼 3개만 표시
+                let startPage = Math.max(1, currentPage - 1);
+                const endPage = Math.min(startPage + 2, totalPages);
                 
-                if (endPage - startPage < 4) {
-                  startPage = Math.max(1, endPage - 4);
+                if (endPage - startPage < 2) {
+                  startPage = Math.max(1, endPage - 2);
                 }
                 
                 return startPage + i;
@@ -387,7 +400,7 @@ export default function PostList({ posts, onRefresh }: PostListProps) {
                 <button
                   key={page}
                   onClick={() => handlePageChange(page)}
-                  className={`min-w-[2rem] px-3 py-1.5 mx-0.5 rounded-md text-sm ${
+                  className={`min-w-[1.75rem] sm:min-w-[2rem] px-2 sm:px-3 py-1.5 mx-0.5 rounded-md text-sm ${
                     currentPage === page
                       ? 'bg-blue-500 text-white'
                       : 'text-gray-600 hover:bg-gray-100'
@@ -401,7 +414,7 @@ export default function PostList({ posts, onRefresh }: PostListProps) {
             <button
               onClick={() => handlePageChange(Math.min(totalPages, currentPage + 1))}
               disabled={currentPage === totalPages}
-              className={`flex items-center px-3 py-1.5 rounded-md text-sm ${
+              className={`flex items-center px-2 sm:px-3 py-1.5 rounded-md text-sm ${
                 currentPage === totalPages 
                   ? 'text-gray-300 cursor-not-allowed' 
                   : 'text-gray-600 hover:bg-gray-100'
