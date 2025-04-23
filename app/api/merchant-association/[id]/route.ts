@@ -11,14 +11,13 @@ const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
-) {
+  context: { params: { id: string } }
+): Promise<Response> {
   try {
-    // 파라미터에서 ID 가져오기 (객체 디스트럭처링 사용)
-    const { id } = params;
+    // 파라미터에서 ID 가져오기 (context.params 사용)
+    const { id } = context.params;
     
     console.log('Fetching merchant association post:', id);
-    
     if (!id) {
       return NextResponse.json(
         { error: '게시글 ID가 필요합니다.' },
