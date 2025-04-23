@@ -7,13 +7,13 @@ import Link from 'next/link';
 import supabase from '../../../lib/supabase';
 import dynamic from 'next/dynamic';
 
-// 에디터는 클라이언트 사이드에서만 로드되도록 dynamic import
-const Editor = dynamic(() => import('../../../components/Editor'), { 
+// WYSIWYG 에디터를 클라이언트 사이드에서만 로드
+const WysiwygEditor = dynamic(() => import('../../../components/WysiwygEditor'), { 
   ssr: false,
   loading: () => (
-    <div className="toss-card flex items-center justify-center h-64">
-      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-      <p className="ml-3 text-gray-600">에디터 로딩 중...</p>
+    <div className="flex items-center justify-center h-64 bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+      <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent"></div>
+      <p className="ml-3 text-gray-600 text-sm font-medium">에디터 로딩 중...</p>
     </div>
   )
 });
@@ -27,13 +27,14 @@ export default function CreatePost() {
   const [signatureTarget, setSignatureTarget] = useState<string>('both');
   const [error, setError] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [expiryDate, setExpiryDate] = useState<string>('');
+  const [hasExpiryDate, setHasExpiryDate] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
     const checkUser = async () => {
       try {
         console.log('사용자 세션 확인 중...');
-        // 사용자 세션 확인
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
         if (sessionError) {
@@ -45,14 +46,12 @@ export default function CreatePost() {
 
         if (!session?.user) {
           console.log('로그인되지 않음, 로그인 페이지로 리디렉션');
-          // 인증되지 않은 사용자는 로그인 페이지로 리디렉션
           router.push('/auth/login?redirect=/merchant-association');
           return;
         }
 
         console.log('로그인 확인됨, 사용자 ID:', session.user.id);
 
-        // 관리자 권한 확인
         try {
           console.log('관리자 권한 확인 중...');
           const response = await fetch(`/api/admin/check-role?userId=${session.user.id}`);
@@ -69,7 +68,6 @@ export default function CreatePost() {
             setIsAdmin(true);
           } else {
             console.log('관리자 권한 없음, 리디렉션');
-            // 관리자가 아닌 경우 상가번영회 메인 페이지로 리디렉션
             router.push('/merchant-association');
           }
         } catch (error) {
@@ -93,6 +91,13 @@ export default function CreatePost() {
     setContent(updatedContent);
   };
 
+  // 오늘 날짜 기준으로 최소 날짜 설정 (내일부터 선택 가능)
+  const getMinDate = () => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return tomorrow.toISOString().split('T')[0];
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -112,6 +117,11 @@ export default function CreatePost() {
       return;
     }
 
+    if (hasExpiryDate && !expiryDate) {
+      setError('만료 기한을 설정해주세요.');
+      return;
+    }
+
     setSubmitting(true);
 
     try {
@@ -122,11 +132,11 @@ export default function CreatePost() {
         content,
         signatureRequired,
         signatureTarget: signatureRequired ? signatureTarget : null,
+        expiry_date: hasExpiryDate ? new Date(expiryDate).toISOString() : null
       };
       
       console.log('요청 데이터:', requestBody);
       
-      // 단순화된 요청
       const response = await fetch('/api/merchant-association/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -135,7 +145,6 @@ export default function CreatePost() {
 
       console.log('API 응답 상태:', response.status);
       
-      let errorData = {};
       let responseData = {};
       
       try {
@@ -167,12 +176,11 @@ export default function CreatePost() {
 
       console.log('게시글 작성 성공:', responseData);
       
-      // 성공 시 상세 페이지로 이동
       if ((responseData as any).id) {
         router.push(`/merchant-association/${(responseData as any).id}`);
       } else {
         console.error('응답에 ID가 없음');
-        router.push('/merchant-association'); // ID가 없으면 목록으로
+        router.push('/merchant-association');
       }
     } catch (error: any) {
       console.error('게시글 작성 오류:', error);
@@ -184,9 +192,9 @@ export default function CreatePost() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="toss-card text-center p-6">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto"></div>
-          <p className="mt-3 text-gray-600">로딩 중...</p>
+        <div className="bg-white rounded-xl shadow-sm p-6 text-center w-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-500 border-t-transparent mx-auto"></div>
+          <p className="mt-3 text-gray-600 text-sm font-medium">로딩 중...</p>
         </div>
       </div>
     );
@@ -194,21 +202,20 @@ export default function CreatePost() {
 
   if (!isAdmin) {
     return (
-      <div className="min-h-screen bg-gray-50 py-12">
-        <div className="container-custom mx-auto px-4">
-          <div className="toss-card p-8 text-center">
-            <div className="text-center text-red-600 mb-4">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <div className="min-h-screen bg-gray-50 py-8">
+        <div className="max-w-md mx-auto px-4">
+          <div className="bg-white rounded-xl shadow-sm p-6 text-center">
+            <div className="text-center text-red-500 mb-4">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              <h2 className="text-2xl font-bold mt-2">접근 권한이 없습니다</h2>
+              <h2 className="text-lg font-medium mt-2">접근 권한이 없습니다</h2>
             </div>
-            <p className="text-center text-gray-600 mb-6">게시글 작성은 관리자만 가능합니다.</p>
-            <div className="text-center">
-              <Link href="/merchant-association" className="btn-secondary">
-                목록으로 돌아가기
-              </Link>
-            </div>
+            <p className="text-gray-600 text-sm mb-6">게시글 작성은 관리자만 가능합니다.</p>
+            <Link href="/merchant-association" 
+                  className="inline-flex justify-center items-center px-4 py-3 rounded-xl text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200">
+              목록으로 돌아가기
+            </Link>
           </div>
         </div>
       </div>
@@ -216,47 +223,81 @@ export default function CreatePost() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12">
-      <div className="container mx-auto px-4 max-w-6xl">
+    <div className="min-h-screen bg-gray-50 py-8">
+      <div className="max-w-4xl mx-auto px-4">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-800">상가번영회 게시글 작성</h1>
+          <h1 className="text-xl font-medium text-gray-800">상가번영회 게시글 작성</h1>
         </div>
 
         {error && (
-          <div className="toss-alert-error mb-6">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className="mb-4 bg-red-50 border border-red-100 rounded-xl p-4 flex items-start">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-500 mr-2 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <span>{error}</span>
+            <span className="text-sm text-red-800">{error}</span>
           </div>
         )}
 
         <form onSubmit={handleSubmit}>
-          <div className="toss-card mb-6">
+          <div className="bg-white rounded-xl shadow-sm overflow-hidden mb-6">
             <div className="p-6">
-              <div className="mb-4">
-                <label htmlFor="title" className="form-label">제목</label>
+              <div className="mb-5">
+                <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-1">제목</label>
                 <input
                   type="text"
                   id="title"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  className="form-input"
+                  className="w-full px-3 py-3 border border-gray-200 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                   placeholder="게시글 제목을 입력하세요"
                   required
                 />
               </div>
 
-              <div className="mb-6">
-                <label className="form-label">내용</label>
-                <Editor 
+              <div className="mb-5">
+                <label className="block text-sm font-medium text-gray-700 mb-1">내용</label>
+                <WysiwygEditor 
                   value={content}
                   onChange={handleEditorChange}
                 />
               </div>
 
-              <div className="mb-6">
-                <div className="flex items-center mb-4">
+              {/* 만료 기한 설정 */}
+              <div className="mb-5">
+                <div className="flex items-center mb-3">
+                  <input
+                    type="checkbox"
+                    id="hasExpiryDate"
+                    checked={hasExpiryDate}
+                    onChange={() => setHasExpiryDate(!hasExpiryDate)}
+                    className="h-4 w-4 text-blue-500 focus:ring-blue-500 border-gray-300 rounded"
+                  />
+                  <label htmlFor="hasExpiryDate" className="ml-2 block text-sm text-gray-700">
+                    만료 기한 설정하기
+                  </label>
+                </div>
+
+                {hasExpiryDate && (
+                  <div className="ml-6 p-4 bg-gray-50 rounded-xl">
+                    <label htmlFor="expiryDate" className="block text-sm font-medium text-gray-700 mb-2">
+                      만료 기한
+                      <span className="ml-1 text-xs text-gray-500">(만료 후에는 게시글 수정 및 서명이 불가능합니다)</span>
+                    </label>
+                    <input
+                      type="date"
+                      id="expiryDate"
+                      value={expiryDate}
+                      onChange={(e) => setExpiryDate(e.target.value)}
+                      min={getMinDate()}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-xl shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                      required={hasExpiryDate}
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="mb-5">
+                <div className="flex items-center mb-3">
                   <input
                     type="checkbox"
                     id="signatureRequired"
@@ -264,14 +305,14 @@ export default function CreatePost() {
                     onChange={() => setSignatureRequired(!signatureRequired)}
                     className="h-4 w-4 text-blue-500 focus:ring-blue-500 border-gray-300 rounded"
                   />
-                  <label htmlFor="signatureRequired" className="ml-2 block text-gray-700">
+                  <label htmlFor="signatureRequired" className="ml-2 block text-sm text-gray-700">
                     서명이 필요한 게시글
                   </label>
                 </div>
 
                 {signatureRequired && (
-                  <div className="ml-6 p-4 bg-gray-50 rounded-lg">
-                    <label className="block text-gray-700 font-medium mb-2">서명 대상</label>
+                  <div className="ml-6 p-4 bg-gray-50 rounded-xl">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">서명 대상</label>
                     <div className="space-y-2">
                       <div className="flex items-center">
                         <input
@@ -283,7 +324,7 @@ export default function CreatePost() {
                           onChange={() => setSignatureTarget('both')}
                           className="h-4 w-4 text-blue-500 focus:ring-blue-500 border-gray-300"
                         />
-                        <label htmlFor="both" className="ml-2 block text-gray-700">
+                        <label htmlFor="both" className="ml-2 block text-sm text-gray-700">
                           임대인 및 임차인 모두
                         </label>
                       </div>
@@ -297,7 +338,7 @@ export default function CreatePost() {
                           onChange={() => setSignatureTarget('landlord')}
                           className="h-4 w-4 text-blue-500 focus:ring-blue-500 border-gray-300"
                         />
-                        <label htmlFor="landlord" className="ml-2 block text-gray-700">
+                        <label htmlFor="landlord" className="ml-2 block text-sm text-gray-700">
                           임대인만
                         </label>
                       </div>
@@ -311,7 +352,7 @@ export default function CreatePost() {
                           onChange={() => setSignatureTarget('tenant')}
                           className="h-4 w-4 text-blue-500 focus:ring-blue-500 border-gray-300"
                         />
-                        <label htmlFor="tenant" className="ml-2 block text-gray-700">
+                        <label htmlFor="tenant" className="ml-2 block text-sm text-gray-700">
                           임차인만
                         </label>
                       </div>
@@ -321,13 +362,14 @@ export default function CreatePost() {
               </div>
             </div>
 
-            <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-between">
-              <Link href="/merchant-association" className="btn-secondary">
+            <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-between">
+              <Link href="/merchant-association" 
+                    className="inline-flex justify-center items-center px-4 py-3 rounded-xl text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200">
                 취소
               </Link>
               <button
                 type="submit"
-                className="btn-primary"
+                className="inline-flex justify-center items-center px-4 py-3 rounded-xl text-sm font-medium text-white bg-blue-500 hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200"
                 disabled={submitting}
               >
                 {submitting ? (

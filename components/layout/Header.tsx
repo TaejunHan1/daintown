@@ -68,7 +68,7 @@ const Header = () => {
 
   // 층별 메뉴
   const floors = [
-    { id: 'b1', name: '지하 1층' },
+    // { id: 'b1', name: '지하 1층' },
     { id: '1f', name: '1층' },
     { id: '2f', name: '2층' },
     { id: '3f', name: '3층' },

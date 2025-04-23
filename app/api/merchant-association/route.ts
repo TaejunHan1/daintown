@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
       // RPC 함수가 없을 수 있으므로 무시하고 계속 진행
     }
 
-    // 게시글 직접 쿼리 시도
+    // 게시글 직접 쿼리 시도 - expiry_date 필드 추가
     const { data: posts, error } = await supabaseAdmin
       .from('merchant_association_posts')
       .select(`
@@ -56,7 +56,9 @@ export async function GET(request: NextRequest) {
         signature_required,
         signature_target,
         created_at,
-        updated_at
+        updated_at,
+        signatures_public,
+        expiry_date
       `)
       .order('created_at', { ascending: false });
 
@@ -107,8 +109,12 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// 더미 게시글 데이터
+// 더미 게시글 데이터 - expiry_date 필드 추가
 function getDummyPost() {
+  // 현재 날짜로부터 7일 후를 만기일로 설정
+  const expiryDate = new Date();
+  expiryDate.setDate(expiryDate.getDate() + 7);
+  
   return {
     id: '00000000-0000-0000-0000-000000000000',
     title: '샘플 게시글',
@@ -119,6 +125,8 @@ function getDummyPost() {
     signature_target: null,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
+    expiry_date: expiryDate.toISOString(),
+    signatures_public: false,
     author_name: '관리자'
   };
 }

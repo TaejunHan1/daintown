@@ -1,3 +1,4 @@
+// app/merchant-association/[id]/page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -54,7 +55,9 @@ export default function PostDetail() {
   // useParams 훅을 사용하여 올바르게 ID 가져오기
   const params = useParams();
   const id = typeof params.id === 'string' ? params.id : Array.isArray(params.id) ? params.id[0] : '';
-  
+  const [showLegalNoticeModal, setShowLegalNoticeModal] = useState(true); // 기본값 true로 설정하여 자동 표시
+
+
   const [loading, setLoading] = useState(true);
   const [post, setPost] = useState<Post | null>(null);
   const [signatures, setSignatures] = useState<Signature[]>([]);
@@ -108,7 +111,23 @@ export default function PostDetail() {
   const [filterDropdownOpen, setFilterDropdownOpen] = useState(false);
   const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
   
+  // 서명 법적 효력 모달 상태
+  const [showSignatureModal, setShowSignatureModal] = useState(false);
+  const [pendingVoteType, setPendingVoteType] = useState<string | null>(null);
+  
   const router = useRouter();
+
+  // 페이지 로드 시 법적 효력 안내 모달 표시
+useEffect(() => {
+  if (!loading && post) {
+    setShowLegalNoticeModal(true);
+  }
+}, [loading, post]);
+
+const closeLegalNoticeModal = () => {
+  setShowLegalNoticeModal(false);
+};
+
 
   useEffect(() => {
     if (!id) return; // id가 없으면 처리하지 않음
@@ -329,6 +348,18 @@ export default function PostDetail() {
     });
   }, [signatures]);
 
+  // 모달 표시 후 body 스크롤 방지
+  useEffect(() => {
+    if (showSignatureModal) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [showSignatureModal]);
+
   const fetchPostData = async (session: any) => {
     try {
       setLoading(true);
@@ -497,15 +528,24 @@ export default function PostDetail() {
     }
   };
 
-  const handleSignatureSubmit = async (voteType: string) => {
-    if (!user || !userSignature || !selectedUserType || !selectedStore) {
+  // 서명하기 단계 1: 모달 표시
+  const handleShowSignatureModal = (voteType: string) => {
+    setPendingVoteType(voteType);
+    setShowSignatureModal(true);
+  };
+
+  // 서명하기 단계 2: 모달에서 동의 클릭 시 실제 서명 처리
+  const handleSignatureSubmit = async () => {
+    if (!user || !userSignature || !selectedUserType || !selectedStore || !pendingVoteType) {
       setError('서명 정보가 없거나 매장이 선택되지 않았습니다.');
+      setShowSignatureModal(false);
       return;
     }
     
     // 마감된 경우 서명 불가
     if (isExpired) {
       setError('마감된 게시글에는 서명할 수 없습니다.');
+      setShowSignatureModal(false);
       return;
     }
 
@@ -514,6 +554,7 @@ export default function PostDetail() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         setError('로그인 세션이 만료되었습니다. 다시 로그인해주세요.');
+        setShowSignatureModal(false);
         return;
       }
 
@@ -532,7 +573,7 @@ export default function PostDetail() {
         userId: user.id,
         signatureData: userSignature,
         userType: selectedUserType,
-        voteType: voteType,
+        voteType: pendingVoteType,
         storeId: selectedStore,
         // 매장 정보 추가
         storeInfo: selectedStoreInfo ? {
@@ -574,6 +615,7 @@ export default function PostDetail() {
             // 이미 서명한 경우 - 현재는 API가 이를 오류로 처리
             if (errorMessage.includes('이미 이 게시글에 서명하셨습니다')) {
               setError('이미 서명한 게시글입니다. 서명을 수정하려면 "서명 수정하기" 버튼을 사용하세요.');
+              setShowSignatureModal(false);
               return;
             }
           }
@@ -582,6 +624,7 @@ export default function PostDetail() {
         }
         
         setError(errorMessage);
+        setShowSignatureModal(false);
         return;
       }
 
@@ -604,9 +647,11 @@ export default function PostDetail() {
       
       // 성공 메시지 표시
       setError(null);
+      setShowSignatureModal(false);
     } catch (error: any) {
       console.error('Error submitting signature:', error);
       setError(error.message || '서명 처리 중 오류가 발생했습니다.');
+      setShowSignatureModal(false);
     }
   };
   
@@ -958,9 +1003,14 @@ export default function PostDetail() {
       <div className="container-custom mx-auto px-4">
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
           {/* 게시글 헤더 */}
-          <div className="border-b border-gray-200 p-6">
+          <div className={`border-b border-gray-200 p-6 ${isExpired ? 'bg-gray-50' : ''}`}>
             <div className="flex justify-between items-start mb-4">
-              <h1 className="text-2xl font-bold text-gray-800">{post.title}</h1>
+              <div className="flex items-center">
+                <h1 className="text-2xl font-bold text-gray-800">{post.title}</h1>
+                {isExpired && (
+                  <span className="ml-3 px-3 py-1 bg-red-100 text-red-800 text-sm font-medium rounded-full">마감됨</span>
+                )}
+              </div>
               <div className="text-sm text-gray-500 flex flex-col items-end">
                 <span>작성일: {formatDate(post.created_at)}</span>
                 <span>조회수: {post.views}</span>
@@ -998,26 +1048,35 @@ export default function PostDetail() {
             {/* 서명 섹션 */}
             {post.signature_required && (
               <div className="mt-8 pt-8 border-t border-gray-200">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-xl font-bold text-gray-800">서명 현황</h2>
-                  
-                  {/* 마감 상태 표시 */}
-                  {isExpired ? (
-                    <span className="text-sm px-3 py-1 bg-red-100 text-red-800 rounded-full">
-                      서명 마감됨
-                    </span>
-                  ) : (
+                {/* 마감된 게시글 서명 섹션 헤더 - 토스 스타일 */}
+                {isExpired ? (
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-500 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                      </svg>
+                      <h2 className="text-xl font-bold text-gray-800">서명 결과</h2>
+                      <span className="ml-3 px-3 py-1 bg-red-100 text-red-800 text-sm font-medium rounded-full">
+                        마감됨 ({formatDate(post.expiry_date || '')})
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xl font-bold text-gray-800">서명 현황</h2>
                     <span className="text-sm px-3 py-1 bg-blue-100 text-blue-800 rounded-full">
                       {timeRemaining}
                     </span>
-                  )}
-                </div>
+                  </div>
+                )}
                 
                 {/* 찬성/반대 결과 요약 표시 - 토스 스타일 */}
                 {signatures.length > 0 && (
                   <div className="mb-6 bg-white p-5 rounded-lg border border-gray-200 shadow-sm">
                     <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-base font-medium text-gray-800">서명 현황 요약</h3>
+                      <h3 className="text-base font-medium text-gray-800">
+                        {isExpired ? '최종 서명 결과' : '서명 현황 요약'}
+                      </h3>
                       <div className="text-sm text-gray-500">
                         총 서명자: <span className="font-semibold">{signatures.length}명</span>
                         <span className="text-xs ml-1">
@@ -1065,18 +1124,17 @@ export default function PostDetail() {
                     
                     <div className="text-sm text-gray-600 mt-6">
                       <span className="font-medium">서명 대상:</span> {getSignatureTargetText(post.signature_target)}
-                      {isExpired && (
-                        <span className="ml-3 text-xs text-red-600 font-medium">※ 서명이 마감되었습니다</span>
-                      )}
                     </div>
                   </div>
                 )}
                 
                 {/* 서명 참여 진행 상태 표시 */}
-                <div className="mb-6 bg-blue-50 p-4 rounded-lg border border-blue-200">
-                  <h3 className="text-sm font-medium text-blue-700 mb-2">서명 진행 상황</h3>
+                <div className={`mb-6 ${isExpired ? 'bg-gray-50' : 'bg-blue-50'} p-4 rounded-lg border ${isExpired ? 'border-gray-200' : 'border-blue-200'}`}>
+                  <h3 className={`text-sm font-medium ${isExpired ? 'text-gray-700' : 'text-blue-700'} mb-2`}>
+                    {isExpired ? '서명 최종 참여율' : '서명 진행 상황'}
+                  </h3>
                   <div className="flex items-center space-x-4 mb-2">
-                    <div className="text-sm text-blue-700 font-medium">
+                    <div className={`text-sm ${isExpired ? 'text-gray-700' : 'text-blue-700'} font-medium`}>
                       {getSignatureProgressText()}
                     </div>
                   </div>
@@ -1084,14 +1142,13 @@ export default function PostDetail() {
                   {/* 서명 목표 달성률 표시 */}
                   <div className="w-full bg-white rounded-full h-2.5 mb-1">
                     <div 
-                      className="bg-blue-500 h-2.5 rounded-full" 
+                      className={`${isExpired ? 'bg-gray-500' : 'bg-blue-500'} h-2.5 rounded-full`} 
                       style={{ width: `${calculateSignatureProgressPercent()}%` }}
                     ></div>
                   </div>
                   
                   <div className="text-xs text-gray-500">
                     서명이 필요한 대상: {getSignatureTargetText(post.signature_target)}
-                    {isExpired && <span className="ml-2 text-red-500">※ 서명이 마감되었습니다</span>}
                   </div>
                 </div>
                 
@@ -1383,7 +1440,17 @@ export default function PostDetail() {
                     </div>
                   </div>
                 ) : (
-                  <p className="text-gray-600 mb-6">아직 서명한 사용자가 없습니다.</p>
+                  <div className={`text-center py-8 ${isExpired ? 'bg-gray-50' : 'bg-blue-50'} rounded-lg border ${isExpired ? 'border-gray-200' : 'border-blue-200'} mb-6`}>
+                    <svg xmlns="http://www.w3.org/2000/svg" className={`h-12 w-12 mx-auto ${isExpired ? 'text-gray-400' : 'text-blue-400'} mb-3`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                    </svg>
+                    <p className={`text-lg font-medium ${isExpired ? 'text-gray-700' : 'text-blue-700'}`}>
+                      {isExpired ? '마감되었지만 서명이 없습니다' : '아직 서명한 사용자가 없습니다'}
+                    </p>
+                    <p className={`mt-1 text-sm ${isExpired ? 'text-gray-500' : 'text-blue-500'}`}>
+                      {isExpired ? '이 문서는 서명 없이 마감되었습니다.' : '첫 번째로 서명해 보세요!'}
+                    </p>
+                  </div>
                 )}
 
                 {error && (
@@ -1484,13 +1551,13 @@ export default function PostDetail() {
                         </p>
                         <div className="flex flex-col md:flex-row gap-4">
                           <button
-                            onClick={() => handleSignatureSubmit('approve')}
+                            onClick={() => handleShowSignatureModal('approve')}
                             className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
                           >
                             찬성 및 서명
                           </button>
                           <button
-                            onClick={() => handleSignatureSubmit('reject')}
+                            onClick={() => handleShowSignatureModal('reject')}
                             className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
                           >
                             반대 및 서명
@@ -1552,10 +1619,10 @@ export default function PostDetail() {
                     )}
                   </div>
                 ) : hasUserSigned && !isEditing ? (
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+                  <div className={`${isExpired ? 'bg-gray-50 border-gray-200' : 'bg-green-50 border-green-200'} border rounded-lg p-4 mb-6`}>
                     <div className="flex flex-col md:flex-row justify-between items-center">
-                      <p className="text-green-800 mb-3 md:mb-0">
-                        이미 이 문서에 서명하셨습니다. 
+                      <p className={`${isExpired ? 'text-gray-800' : 'text-green-800'} mb-3 md:mb-0`}>
+                        {isExpired ? '이 문서에 서명하셨습니다. (마감됨)' : '이미 이 문서에 서명하셨습니다.'}
                         {userCurrentSignature && (
                           <span className="font-medium">
                             ({getUserTypeText(userCurrentSignature.user_type)}으로 
@@ -1570,11 +1637,7 @@ export default function PostDetail() {
                         >
                           서명 수정하기
                         </button>
-                      ) : (
-                        <span className="text-xs px-3 py-1 bg-red-100 text-red-800 rounded-full">
-                          마감되어 수정할 수 없음
-                        </span>
-                      )}
+                      ) : null}
                     </div>
                   </div>
                 ) : (
@@ -1621,215 +1684,363 @@ export default function PostDetail() {
                         
                         {/* 현재 상태에 따른 설명 */}
                         <div className="text-xs text-gray-500 mb-2">
-                          현재 상태: {visibilityVotes.publicVotes > visibilityVotes.privateVotes 
-                            ? <span className="text-green-600 font-medium">공개 상태</span>
-                            : visibilityVotes.publicVotes === visibilityVotes.privateVotes 
-                              ? <span className="text-yellow-600 font-medium">동점으로 비공개 상태</span>
-                              : <span className="text-red-600 font-medium">비공개 상태</span>
-                          }
-                        </div>
-                        
-                        {/* 투표 마감일 */}
-                        <div className="text-xs text-gray-500 mb-2">
-                          투표 마감일: {getVotingDeadline()} (마감일까지 투표 수정 불가)
-                        </div>
-                        
-                        {/* 투표 진행 바 */}
-                        <div className="mt-2 w-full bg-gray-200 rounded-full h-2.5 mb-1">
-                          <div 
-                            className="bg-blue-500 h-2.5 rounded-full" 
-                            style={{ width: `${calculateVotingProgressPercent()}%` }}
-                          ></div>
-                        </div>
-                        
-                        <div className="text-xs text-gray-500">
-                          {getVotingProgressText()}
-                        </div>
-                        
-                        {/* 과반수 설명 */}
-                        <div className="mt-2 text-xs bg-blue-50 p-2 rounded border border-blue-100">
-                          <p className="text-blue-800">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            서명자 중 공개 투표가 비공개 투표보다 많을 경우에만 서명 정보가 공개됩니다.
-                            공개/비공개 투표가 동일한 경우, 기본 원칙에 따라 비공개로 처리됩니다.
-                          </p>
-                        </div>
+                        현재 상태: {visibilityVotes.publicVotes > visibilityVotes.privateVotes 
+  ? <span className="text-green-600 font-medium">공개 상태</span>
+  : visibilityVotes.publicVotes === visibilityVotes.privateVotes 
+    ? <span className="text-yellow-600 font-medium">동점으로 비공개 상태</span>
+    : <span className="text-red-600 font-medium">비공개 상태</span>
+}
                       </div>
-                    )}
-                    
-                    <p className="text-gray-700 mb-2">
-                      이 문서에 서명한 정보(매장 이름, 찬반 여부, 서명 이미지)를 다른 사용자에게 공개할지 투표해주세요.
-                    </p>
-                    <p className="text-gray-600 text-sm mb-4">
-                      모든 서명자 중 공개 투표가 비공개 투표보다 많을 경우에만 서명 정보가 공개됩니다. 
-                      투표가 동일한 경우 비공개로 처리됩니다.
-                      투표는 마감일({getVotingDeadline()})까지 진행되며, 한 번 투표하면 수정할 수 없습니다.
-                    </p>
-                    
-                    {votingError && (
-                      <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
-                        <p className="text-red-800 text-sm">{votingError}</p>
+                      
+                      {/* 투표 마감일 */}
+                      <div className="text-xs text-gray-500 mb-2">
+                        투표 마감일: {getVotingDeadline()} (마감일까지 투표 수정 불가)
                       </div>
-                    )}
-                    
-                    {hasUserVoted ? (
-                      <div className="bg-white rounded-lg p-4 border border-gray-200">
-                        <div className="flex items-center">
+                      
+                      {/* 투표 진행 바 */}
+                      <div className="mt-2 w-full bg-gray-200 rounded-full h-2.5 mb-1">
+                        <div 
+                          className="bg-blue-500 h-2.5 rounded-full" 
+                          style={{ width: `${calculateVotingProgressPercent()}%` }}
+                        ></div>
+                      </div>
+                      
+                      <div className="text-xs text-gray-500">
+                        {getVotingProgressText()}
+                      </div>
+                      
+                      {/* 과반수 설명 */}
+                      <div className="mt-2 text-xs bg-blue-50 p-2 rounded border border-blue-100">
+                        <p className="text-blue-800">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 inline-block mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          서명자 중 공개 투표가 비공개 투표보다 많을 경우에만 서명 정보가 공개됩니다.
+                          공개/비공개 투표가 동일한 경우, 기본 원칙에 따라 비공개로 처리됩니다.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  
+                  <p className="text-gray-700 mb-2">
+                    이 문서에 서명한 정보(매장 이름, 찬반 여부, 서명 이미지)를 다른 사용자에게 공개할지 투표해주세요.
+                  </p>
+                  <p className="text-gray-600 text-sm mb-4">
+                    모든 서명자 중 공개 투표가 비공개 투표보다 많을 경우에만 서명 정보가 공개됩니다. 
+                    투표가 동일한 경우 비공개로 처리됩니다.
+                    투표는 마감일({getVotingDeadline()})까지 진행되며, 한 번 투표하면 수정할 수 없습니다.
+                  </p>
+                  
+                  {votingError && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+                      <p className="text-red-800 text-sm">{votingError}</p>
+                    </div>
+                  )}
+                  
+                  {hasUserVoted ? (
+                    <div className="bg-white rounded-lg p-4 border border-gray-200">
+                      <div className="flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-green-500 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                        </svg>
+                        <p className="text-gray-700 font-medium">
+                          귀하는 서명 정보 {userVoteForPublic ? '공개' : '비공개'}에 투표하셨습니다.
+                        </p>
+                      </div>
+                      <p className="mt-2 text-sm text-gray-500">투표는 마감일까지 수정할 수 없습니다.</p>
+                      
+                      {/* 투표 상태 표시 */}
+                      <div className="mt-4 flex space-x-4">
+                        <button
+                          disabled
+                          className={`px-6 py-2 rounded-lg ${
+                            userVoteForPublic
+                              ? 'bg-green-600 text-white'
+                              : 'bg-gray-200 text-gray-500'
+                          } transition-colors font-medium opacity-70 cursor-not-allowed`}
+                        >
+                          공개에 동의
+                        </button>
+                        <button
+                          disabled
+                          className={`px-6 py-2 rounded-lg ${
+                            userVoteForPublic === false
+                              ? 'bg-red-600 text-white'
+                              : 'bg-gray-200 text-gray-500'
+                          } transition-colors font-medium opacity-70 cursor-not-allowed`}
+                        >
+                          비공개 선호
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col md:flex-row gap-4">
+                      <button
+                        onClick={() => handleVisibilityVote(true)}
+                        disabled={votingInProgress}
+                        className={`px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium ${
+                          votingInProgress ? 'opacity-70 cursor-not-allowed' : ''
+                        }`}
+                      >
+                        {votingInProgress ? '처리 중...' : '공개에 동의'}
+                      </button>
+                      <button
+                        onClick={() => handleVisibilityVote(false)}
+                        disabled={votingInProgress}
+                        className={`px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium ${
+                          votingInProgress ? 'opacity-70 cursor-not-allowed' : ''
+                        }`}
+                      >
+                        {votingInProgress ? '처리 중...' : '비공개 선호'}
+                      </button>
+                    </div>
+                  )}
+                  
+                  {/* 투표에 대한 부가 설명 */}
+                  <div className="mt-4">
+                    <div className="bg-white border border-gray-200 rounded-lg p-3">
+                    <h4 className="font-medium text-gray-800 mb-2 text-sm">서명 공개 여부 투표 안내</h4>
+                      <ul className="text-xs text-gray-600 space-y-1 list-disc pl-5">
+                        <li>투표는 마감일까지 진행됩니다.</li>
+                        <li>한 번 투표한 내용은 수정할 수 없습니다.</li>
+                        <li>공개 투표가 비공개 투표보다 많을 경우에만 서명 정보가 공개됩니다.</li>
+                        <li><strong>공개/비공개 투표 수가 같을 경우 비공개로 처리됩니다.</strong></li>
+                        <li>공개되는 정보: 서명자 이름, 매장 정보, 찬반 여부, 서명 이미지</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* 마감된 경우 서명 공개 여부 투표 결과 표시 - 토스 스타일로 개선 */}
+              {isExpired && visibilityVotes && (
+                <div className="mt-8 pt-8 border-t border-gray-200">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center">
+                      <h2 className="text-xl font-bold text-gray-800">투표 최종 결과</h2>
+                      <span className="ml-3 px-3 py-1 bg-red-100 text-red-800 text-sm font-medium rounded-full">
+                        {formatDate(post.expiry_date || '')} 마감
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <div className="mb-6 bg-white p-6 rounded-lg border border-gray-200 shadow-sm">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                      <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-sm">
+                        <h3 className="text-base font-medium text-gray-800 mb-4 flex items-center">
                           <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-green-500 mr-2" viewBox="0 0 20 20" fill="currentColor">
                             <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                           </svg>
-                          <p className="text-gray-700 font-medium">
-                            귀하는 서명 정보 {userVoteForPublic ? '공개' : '비공개'}에 투표하셨습니다.
-                          </p>
-                        </div>
-                        <p className="mt-2 text-sm text-gray-500">투표는 마감일까지 수정할 수 없습니다.</p>
-                        
-                        {/* 투표 상태 표시 */}
-                        <div className="mt-4 flex space-x-4">
-                          <button
-                            disabled
-                            className={`px-6 py-2 rounded-lg ${
-                              userVoteForPublic
-                                ? 'bg-green-600 text-white'
-                                : 'bg-gray-200 text-gray-500'
-                            } transition-colors font-medium opacity-70 cursor-not-allowed`}
-                          >
-                            공개에 동의
-                          </button>
-                          <button
-                            disabled
-                            className={`px-6 py-2 rounded-lg ${
-                              userVoteForPublic === false
-                                ? 'bg-red-600 text-white'
-                                : 'bg-gray-200 text-gray-500'
-                            } transition-colors font-medium opacity-70 cursor-not-allowed`}
-                          >
-                            비공개 선호
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col md:flex-row gap-4">
-                        <button
-                          onClick={() => handleVisibilityVote(true)}
-                          disabled={votingInProgress}
-                          className={`px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium ${
-                            votingInProgress ? 'opacity-70 cursor-not-allowed' : ''
-                          }`}
-                        >
-                          {votingInProgress ? '처리 중...' : '공개에 동의'}
-                        </button>
-                        <button
-                          onClick={() => handleVisibilityVote(false)}
-                          disabled={votingInProgress}
-                          className={`px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium ${
-                            votingInProgress ? 'opacity-70 cursor-not-allowed' : ''
-                          }`}
-                        >
-                          {votingInProgress ? '처리 중...' : '비공개 선호'}
-                        </button>
-                      </div>
-                    )}
-                    
-                    {/* 투표에 대한 부가 설명 */}
-                    <div className="mt-4">
-                      <div className="bg-white border border-gray-200 rounded-lg p-3">
-                      <h4 className="font-medium text-gray-800 mb-2 text-sm">서명 공개 여부 투표 안내</h4>
-                        <ul className="text-xs text-gray-600 space-y-1 list-disc pl-5">
-                          <li>투표는 마감일까지 진행됩니다.</li>
-                          <li>한 번 투표한 내용은 수정할 수 없습니다.</li>
-                          <li>공개 투표가 비공개 투표보다 많을 경우에만 서명 정보가 공개됩니다.</li>
-                          <li><strong>공개/비공개 투표 수가 같을 경우 비공개로 처리됩니다.</strong></li>
-                          <li>공개되는 정보: 서명자 이름, 매장 정보, 찬반 여부, 서명 이미지</li>
-                        </ul>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                
-                {/* 마감된 경우 서명 공개 여부 투표 결과 표시 */}
-                {isExpired && visibilityVotes && (
-                  <div className="mt-8 pt-8 border-t border-gray-200">
-                    <div className="flex items-center justify-between mb-4">
-                      <h2 className="text-xl font-bold text-gray-800">서명 공개 여부 결과</h2>
-                      <span className="text-sm px-3 py-1 bg-red-100 text-red-800 rounded-full">
-                        투표 마감됨
-                      </span>
-                    </div>
-                    
-                    <div className="mb-6 bg-amber-50 p-4 rounded-lg border border-amber-200">
-                      <h3 className="text-sm font-medium text-amber-800 mb-2">투표 결과</h3>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-white p-3 rounded-lg border border-green-200">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="font-medium text-green-700">공개 투표</span>
-                            <span className="text-sm font-medium text-green-700">
-                              {visibilityVotes.publicVotes}명 ({Math.round((visibilityVotes.publicVotes / (visibilityVotes.totalVotes || 1)) * 100)}%)
-                            </span>
+                          공개 투표
+                        </h3>
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="text-4xl font-bold text-green-600">
+                            {visibilityVotes.publicVotes}
+                            <span className="text-sm font-normal text-gray-500 ml-1">명</span>
+                          </div>
+                          <div className="text-xl font-semibold text-gray-700">
+                            {Math.round((visibilityVotes.publicVotes / (visibilityVotes.totalVotes || 1)) * 100)}%
                           </div>
                         </div>
-                        <div className="bg-white p-3 rounded-lg border border-red-200">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="font-medium text-red-700">비공개 투표</span>
-                            <span className="text-sm font-medium text-red-700">
-                              {visibilityVotes.privateVotes}명 ({Math.round((visibilityVotes.privateVotes / (visibilityVotes.totalVotes || 1)) * 100)}%)
-                            </span>
-                          </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div 
+                            className="bg-green-500 h-2 rounded-full" 
+                            style={{ width: `${Math.round((visibilityVotes.publicVotes / (visibilityVotes.totalVotes || 1)) * 100)}%` }}
+                          ></div>
                         </div>
                       </div>
                       
-                      <div className="mt-4 text-center p-2 font-medium rounded">
-                        {visibilityVotes.publicVotes > visibilityVotes.privateVotes ? (
-                          <div className="bg-green-100 p-2 rounded text-green-800">
-                            서명 정보가 <span className="font-bold">공개</span>됩니다. (공개 투표가 더 많음)
+                      <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-sm">
+                        <h3 className="text-base font-medium text-gray-800 mb-4 flex items-center">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-500 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                          </svg>
+                          비공개 투표
+                        </h3>
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="text-4xl font-bold text-red-600">
+                            {visibilityVotes.privateVotes}
+                            <span className="text-sm font-normal text-gray-500 ml-1">명</span>
                           </div>
-                        ) : visibilityVotes.publicVotes === visibilityVotes.privateVotes ? (
-                          <div className="bg-yellow-100 p-2 rounded text-yellow-800">
-                            투표 결과가 동일하여 서명 정보가 <span className="font-bold">비공개</span>됩니다. (투표 기본 원칙)
+                          <div className="text-xl font-semibold text-gray-700">
+                            {Math.round((visibilityVotes.privateVotes / (visibilityVotes.totalVotes || 1)) * 100)}%
                           </div>
-                        ) : (
-                          <div className="bg-red-100 p-2 rounded text-red-800">
-                            서명 정보가 <span className="font-bold">비공개</span>됩니다. (비공개 투표가 더 많음)
-                          </div>
-                        )}
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div 
+                            className="bg-red-500 h-2 rounded-full" 
+                            style={{ width: `${Math.round((visibilityVotes.privateVotes / (visibilityVotes.totalVotes || 1)) * 100)}%` }}
+                          ></div>
+                        </div>
                       </div>
                     </div>
                     
-                    {hasUserSigned && (
-                      <div className="bg-white rounded-lg p-4 border border-gray-200">
-                        <div className="flex items-center">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-500 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                          </svg>
-                          <p className="text-gray-700 font-medium">
-                            귀하는 이 문서에 서명하셨습니다. {hasUserVoted && (
-                              <span>({userVoteForPublic ? '공개' : '비공개'} 투표)</span>
-                            )}
+                    {/* 최종 결과 */}
+                    <div className="mt-4 text-center">
+                      <p className="text-sm text-gray-500 mb-2">총 투표자 수: {visibilityVotes.totalVotes}명 (전체 서명자 {signatures.length}명 중 {calculateVotingProgressPercent()}%)</p>
+                      
+                      {visibilityVotes.publicVotes > visibilityVotes.privateVotes ? (
+                        <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                          <p className="text-lg font-medium text-green-800">최종 결과: <span className="font-bold">공개</span></p>
+                          <p className="text-sm text-green-700 mt-1">
+                            공개 투표({visibilityVotes.publicVotes}명)가 비공개 투표({visibilityVotes.privateVotes}명)보다 많아 서명 정보가 공개됩니다.
                           </p>
                         </div>
-                      </div>
-                    )}
+                      ) : visibilityVotes.publicVotes === visibilityVotes.privateVotes ? (
+                        <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                          <p className="text-lg font-medium text-yellow-800">최종 결과: <span className="font-bold">비공개</span></p>
+                          <p className="text-sm text-yellow-700 mt-1">
+                            공개 투표({visibilityVotes.publicVotes}명)와 비공개 투표({visibilityVotes.privateVotes}명)가 동일하여 기본 원칙에 따라 비공개로 처리됩니다.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+                          <p className="text-lg font-medium text-red-800">최종 결과: <span className="font-bold">비공개</span></p>
+                          <p className="text-sm text-red-700 mt-1">
+                            비공개 투표({visibilityVotes.privateVotes}명)가 공개 투표({visibilityVotes.publicVotes}명)보다 많아 서명 정보가 비공개됩니다.
+                          </p>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                )}
-              </div>
-            )}
-          </div>
+                  
+                  {hasUserSigned && (
+                    <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                      <div className="flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-500 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                        </svg>
+                        <div>
+                          <p className="text-gray-700 font-medium">
+                            귀하는 이 문서에 서명하셨습니다.
+                          </p>
+                          {hasUserVoted && (
+                            <p className="text-sm text-gray-500">
+                              귀하의 투표: <span className={userVoteForPublic ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>
+                                {userVoteForPublic ? '공개' : '비공개'}
+                              </span>
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
-          {/* 하단 버튼 */}
-          <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-between items-center">
-            <Link href="/merchant-association" className="btn-secondary">
-              목록으로
+        {/* 하단 버튼 - 마감된 게시글은 관리자도 수정 불가능하도록 변경 */}
+        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-between items-center">
+          <Link href="/merchant-association" className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors">
+            목록으로
+          </Link>
+          
+          {isAdmin && !isExpired ? (
+            <Link href={`/merchant-association/edit/${id}`} className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors">
+              수정하기
             </Link>
-            {isAdmin && (
-              <Link href={`/merchant-association/edit/${id}`} className="btn-primary">
-                수정하기
-              </Link>
-            )}
-          </div>
+          ) : isAdmin && isExpired ? (
+            <div className="flex items-center text-red-500 bg-red-50 px-4 py-2 rounded-lg border border-red-100">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="text-sm font-medium">마감된 게시글은 수정할 수 없습니다</span>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>
-  );
+
+    {/* 서명 법적 효력 모달 - 토스 스타일 */}
+    {showLegalNoticeModal && (
+  <div className="fixed inset-0 z-50 overflow-y-auto">
+    <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+      {/* 배경 오버레이 */}
+      <div className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75" onClick={closeLegalNoticeModal} aria-hidden="true"></div>
+      
+      {/* 모달 중앙 정렬을 위한 트릭 */}
+      <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+      
+      <div 
+        className="inline-block overflow-hidden text-left align-bottom bg-white rounded-lg shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full"
+        role="dialog" 
+        aria-modal="true" 
+        aria-labelledby="modal-headline"
+      >
+        {/* 모달 헤더 */}
+        <div className="px-4 pt-5 pb-4 bg-white sm:p-6 sm:pb-4">
+          <div className="sm:flex sm:items-start">
+            <div className="flex items-center justify-center flex-shrink-0 w-12 h-12 mx-auto bg-blue-100 rounded-full sm:mx-0 sm:h-10 sm:w-10">
+              <svg className="w-6 h-6 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+              <h3 className="text-lg font-medium leading-6 text-gray-900" id="modal-headline">
+                전자서명 법적 효력 안내
+              </h3>
+              <div className="mt-2">
+                <p className="text-sm text-gray-500">
+                  본 게시글에 서명 시 아래 내용이 적용됩니다.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        {/* 모달 내용 */}
+        <div className="px-6 py-4 bg-gray-50 border-t border-b border-gray-200">
+          <div className="space-y-4">
+            <div className="p-4 bg-white rounded-lg border border-gray-200 shadow-sm">
+              <p className="text-sm text-gray-700 leading-relaxed">
+                본 서명은 실명 인증을 거친 전자서명으로, 전자서명법 및 관련 법령에 따라 <strong className="text-blue-600">종이 문서에 자필 서명한 것과 동일한 법적 효력</strong>을 가집니다.
+              </p>
+            </div>
+            
+            <div className="p-4 bg-white rounded-lg border border-gray-200 shadow-sm">
+              <div className="flex">
+                <div className="flex-shrink-0 mt-1">
+                  <svg className="w-5 h-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <p className="ml-2 text-sm text-gray-700">
+                  해당 서명을 통해 귀하는 본 게시글 또는 문서의 내용에 동의하며, 그에 따른 책임 및 권리가 발생함을 확인합니다.
+                </p>
+              </div>
+            </div>
+            
+            <div className="p-4 bg-white rounded-lg border border-gray-200 shadow-sm">
+              <div className="flex">
+                <div className="flex-shrink-0 mt-1">
+                  <svg className="w-5 h-5 text-blue-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M18 8a6 6 0 01-7.743 5.743L10 14l-1 1-1 1H6v-1l1-1 1-1-1-1H5a5 5 0 010-10h6a5 5 0 011 9.9V13a3 3 0 00.4-5.9 3 3 0 00-3.8 2.8V7a1 1 0 001-1V5a1 1 0 00-1-1v-.6A3.6 3.6 0 0112 0H4a3.6 3.6 0 014 3.4V4a1 1 0 00-1 1v1a1 1 0 001 1v6a1 1 0 001 1h4a1 1 0 001-1v-5z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <p className="ml-2 text-sm text-gray-700">
+                  전자서명과 관련된 정보(서명 일시, 사용자 정보 등)는 관련 법령에 따라 안전하게 보관됩니다.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        {/* 모달 푸터 */}
+        <div className="px-4 py-3 bg-white sm:px-6 sm:flex sm:flex-row-reverse">
+          <button 
+            type="button" 
+            className="inline-flex justify-center w-full px-4 py-2 text-base font-medium text-white bg-blue-600 border border-transparent rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm"
+            onClick={closeLegalNoticeModal}
+          >
+            확인했습니다
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+    )}
+  </div>
+);
 }

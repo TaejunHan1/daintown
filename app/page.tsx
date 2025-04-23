@@ -1,9 +1,41 @@
 // app/page.tsx
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import ImageSlider from '@/components/ui/ImageSlider';
+import Image from 'next/image';
+
+// 이미지 슬라이더 컴포넌트
+const SimpleImageSlider = ({ images }: { images: string[] }) => {
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  // 3초마다 이미지 전환 (useState를 useEffect로 변경)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentIndex((prevIndex) => (prevIndex + 1) % images.length);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [images]);
+
+  return (
+    <div className="relative w-full h-96 overflow-hidden">
+      {images.map((src, index) => (
+        <div 
+          key={index}
+          className={`absolute top-0 left-0 w-full h-full transition-opacity duration-1000 ${
+            index === currentIndex ? 'opacity-100' : 'opacity-0'
+          }`}
+        >
+          <img 
+            src={src} 
+            alt={`Building image ${index + 1}`} 
+            className="w-full h-full object-cover"
+          />
+        </div>
+      ))}
+    </div>
+  );
+};
 
 export default function Home() {
   // 각 층별 더보기 상태 관리
@@ -27,18 +59,18 @@ export default function Home() {
     });
   };
 
-  // 건물 이미지 (실제 서비스에서는 진짜 건물 이미지로 대체)
+  // 건물 이미지 - 수정된 부분 (올바른 경로 사용)
   const buildingImages = [
-    '/images/building1.jpg',
-    '/images/building2.jpg',
-    '/images/building3.jpg',
-    '/images/building4.jpg',
+    '/images/stores/1F/puffpuff/puffpuff1.jpeg',
+    '/images/stores/1F/pharmacy/pharmacy1.jpeg',
+    '/images/stores/1F/pb/pb1.jpg',
+    '/images/stores/1F/haejang/haejang1.jpg',
   ];
 
   return (
     <div className="bg-white">
-      {/* 히어로 섹션 - 이미지 슬라이더 */}
-      <ImageSlider images={buildingImages} />
+      {/* 히어로 섹션 - 이미지 슬라이더 (수정) */}
+      <SimpleImageSlider images={buildingImages} />
 
       {/* 다인타운 소개 섹션 */}
       <section className="py-16 bg-white">
@@ -136,7 +168,6 @@ export default function Home() {
                       </svg>
                     </div>
                     <span className="text-[#333] font-medium">뻐끔뻐끔전자담배</span>
-
                   </div>
                   <div className="flex items-center p-3 bg-[#f8f9fa] rounded-lg">
                     <div className="w-8 h-8 rounded-full bg-[#E6FFE9] flex items-center justify-center mr-3">
@@ -147,7 +178,7 @@ export default function Home() {
                     <span className="text-[#333] font-medium">종로김밥</span>
                   </div>
                   
-                  {expanded['1f'] && (
+                  {expanded['1f'] ? (
                     <>
                       <div className="flex items-center p-3 bg-[#f8f9fa] rounded-lg">
                         <div className="w-8 h-8 rounded-full bg-[#E6FFFA] flex items-center justify-center mr-3">
@@ -156,7 +187,22 @@ export default function Home() {
                           </svg>
                         </div>
                         <span className="text-[#333] font-medium">SK텔레콤</span>
-
+                      </div>
+                      <div className="flex items-center p-3 bg-[#f8f9fa] rounded-lg">
+                        <div className="w-8 h-8 rounded-full bg-[#FFE6F2] flex items-center justify-center mr-3">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-[#E83E8C]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" />
+                          </svg>
+                        </div>
+                        <span className="text-[#333] font-medium">빈티지멀티샵</span>
+                      </div>
+                      <div className="flex items-center p-3 bg-[#f8f9fa] rounded-lg">
+                        <div className="w-8 h-8 rounded-full bg-[#E6FFE9] flex items-center justify-center mr-3">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-[#2BC451]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                          </svg>
+                        </div>
+                        <span className="text-[#333] font-medium">선비꼬마김밥</span>
                       </div>
                       <div className="flex items-center p-3 bg-[#f8f9fa] rounded-lg">
                         <div className="w-8 h-8 rounded-full bg-[#FFF3E0] flex items-center justify-center mr-3">
@@ -183,7 +229,7 @@ export default function Home() {
                         <span className="text-[#333] font-medium">온누리약국</span>
                       </div>
                     </>
-                  )}
+                  ) : null}
                   
                   <button
                     onClick={() => toggleExpand('1f')}
@@ -198,7 +244,7 @@ export default function Home() {
                       </>
                     ) : (
                       <>
-                        더보기 (+4)
+                        더보기 (+6)
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                         </svg>
@@ -433,8 +479,8 @@ export default function Home() {
                     <div className="w-8 h-8 rounded-full bg-[#E6FFFA] flex items-center justify-center mr-3">
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-[#0694A2]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-                      </svg>
-                    </div>
+                        </svg>
+                      </div>
                     <span className="text-[#333] font-medium">후한의원</span>
                     <span className="ml-2 text-xs bg-[#e3f2fd] text-[#0F6FFF] px-2 py-0.5 rounded">피부/비만/통증</span>
                   </div>

@@ -28,7 +28,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '요청 데이터를 파싱할 수 없습니다.' }, { status: 400 });
     }
 
-    const { title, content, signatureRequired, signatureTarget } = requestData;
+    const { title, content, signatureRequired, signatureTarget, expiry_date } = requestData;
+    console.log('만료일:', expiry_date);
 
     // 서비스 롤 키로 Supabase 클라이언트 생성 (Admin 권한)
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
@@ -105,16 +106,35 @@ export async function POST(request: NextRequest) {
     // 게시글 저장 시도
     console.log('게시글 저장 시도...');
     try {
+      // 게시글 데이터 준비 (TypeScript 인식을 위한 타입 정의)
+      interface PostData {
+        title: string;
+        content: string;
+        author_id: string;
+        signature_required: boolean;
+        signature_target: string | null;
+        views: number;
+        expiry_date?: string | null;
+      }
+      
+      const postData: PostData = {
+        title,
+        content,
+        author_id: userId,
+        signature_required: signatureRequired || false,
+        signature_target: signatureRequired ? signatureTarget : null,
+        views: 0
+      };
+      
+      // 만료일이 있는 경우 추가
+      if (expiry_date) {
+        postData.expiry_date = expiry_date;
+        console.log('만료일 추가됨:', expiry_date);
+      }
+      
       const { data: post, error: postError } = await supabaseAdmin
         .from('merchant_association_posts')
-        .insert({
-          title,
-          content,
-          author_id: userId,
-          signature_required: signatureRequired || false,
-          signature_target: signatureRequired ? signatureTarget : null,
-          views: 0,
-        })
+        .insert(postData)
         .select('id')
         .single();
 
