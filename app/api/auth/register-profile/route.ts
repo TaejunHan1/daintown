@@ -22,10 +22,10 @@ const supabaseAdmin = createClient(
 export async function POST(request: NextRequest) {
   try {
     // 요청 데이터 파싱
-    const { userId, fullName, phoneNumber, businessDocUrl, signatureData } = await request.json();
+    const { userId, fullName, phoneNumber, businessDocUrl, signatureData, verified } = await request.json();
 
     // 필요한 파라미터 체크
-    if (!userId || !fullName) {
+    if (!userId || !fullName || !phoneNumber) {
       return NextResponse.json(
         { error: '필수 정보가 누락되었습니다.' },
         { status: 400 }
@@ -33,6 +33,9 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('Updating profile for user:', userId);
+    
+    // 휴대폰 인증 여부에 따른 status 설정
+    const status = verified === true ? 'pending' : 'pending';
 
     try {
       // SQL 쿼리를 직접 사용하여 RLS 우회
@@ -43,7 +46,7 @@ export async function POST(request: NextRequest) {
         p_business_doc: businessDocUrl,
         p_signature_data: signatureData,
         p_role: 'user',
-        p_status: 'pending'
+        p_status: status
       });
 
       if (error) {
@@ -69,7 +72,7 @@ export async function POST(request: NextRequest) {
                 business_registration_doc = ${businessDocUrl ? `'${businessDocUrl}'` : 'NULL'},
                 signature_data = ${signatureData ? `'${signatureData}'` : 'NULL'},
                 role = 'user',
-                status = 'pending',
+                status = '${status}',
                 updated_at = NOW()
             WHERE id = '${userId}'
           `
@@ -96,7 +99,7 @@ export async function POST(request: NextRequest) {
             business_registration_doc: businessDocUrl,
             signature_data: signatureData,
             role: 'user',
-            status: 'pending',
+            status: status,
             updated_at: new Date().toISOString(),
           })
           .eq('id', userId);
