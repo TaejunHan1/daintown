@@ -5,9 +5,20 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
+// 매장 정보 가져오기 - 더 자세한 정보 조회
+let storeInfo: {
+  store_id: string;
+  store_name: string;
+  floor: string;
+  unit_number: string;
+  business_type?: string;
+  user_type: string;
+};
+
 // 서비스 롤 키로 Supabase 클라이언트 생성
 const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
+// 서명 저장 (POST 요청 처리 부분)
 export async function POST(request: NextRequest) {
   try {
     console.log('서명 API 호출 시작');
@@ -27,76 +38,40 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 게시글 존재 확인
-    const { data: post, error: postError } = await supabaseAdmin
-      .from('merchant_association_posts')
-      .select('signature_required, signature_target')
-      .eq('id', postId)
-      .single();
-
-    if (postError) {
-      console.error('게시글 조회 오류:', postError);
-      return NextResponse.json(
-        { error: '게시글을 찾을 수 없습니다.', details: postError.message },
-        { status: 404 }
-      );
-    }
-
-    // 서명이 필요한 게시글인지 확인
-    if (!post.signature_required) {
-      return NextResponse.json(
-        { error: '이 게시글은 서명이 필요하지 않습니다.' },
-        { status: 400 }
-      );
-    }
-
-    // 서명 대상 확인
-    if (post.signature_target !== 'both' && post.signature_target !== userType) {
-      return NextResponse.json(
-        { error: `이 게시글은 ${post.signature_target === 'landlord' ? '임대인' : '임차인'}만 서명할 수 있습니다.` },
-        { status: 400 }
-      );
-    }
-
-    // 이미 서명했는지 확인
-    const { data: existingSignature, error: signatureCheckError } = await supabaseAdmin
-      .from('merchant_association_signatures')
-      .select('id')
-      .eq('post_id', postId)
-      .eq('user_id', userId)
-      .maybeSingle();
-
-    if (signatureCheckError) {
-      console.error('기존 서명 확인 오류:', signatureCheckError);
-    } else if (existingSignature) {
-      return NextResponse.json(
-        { error: '이미 이 게시글에 서명하셨습니다.' },
-        { status: 400 }
-      );
-    }
-    
-    // 매장 정보 가져오기
+    // 매장 정보 가져오기 - 더 자세한 정보 조회
     const { data: storeData, error: storeError } = await supabaseAdmin
-      .from('stores')
-      .select('name, floor, unit_number')
-      .eq('id', storeId)
-      .single();
-      
-    if (storeError) {
-      console.error('매장 정보 조회 오류:', storeError);
-    }
+    .from('stores')
+    .select('id, name, floor, unit_number, business_type')
+    .eq('id', storeId)
+    .single();
     
-    // 매장 정보 JSON 객체 생성
-    const storeInfo = storeData ? {
+  if (storeError) {
+    console.error('매장 정보 조회 오류:', storeError);
+    
+    // 매장 정보 조회 실패 시, 대체 정보로 계속 진행
+    console.log('대체 매장 정보 사용');
+    storeInfo = {
+      store_id: storeId,
+      store_name: userType === 'landlord' ? '임대인 매장' : '임차인 매장',
+      floor: userType === 'landlord' ? 'ALL' : '1F',
+      unit_number: userType === 'landlord' ? 'ALL' : '101',
+      user_type: userType // 유형 정보 추가 저장
+    };
+  } else {
+    // 매장 정보 JSON 객체 생성 - 유형 정보 추가
+    storeInfo = {
       store_id: storeId,
       store_name: storeData.name,
       floor: storeData.floor,
-      unit_number: storeData.unit_number
-    } : { store_id: storeId };
+      unit_number: storeData.unit_number,
+      business_type: storeData.business_type,
+      user_type: userType // 유형 정보 추가 저장
+    };
+  }
 
     // 서명 저장
     try {
-      console.log('서명 저장 시도');
+      console.log('서명 저장 시도. 매장 정보:', storeInfo);
       const { data: signature, error: signatureError } = await supabaseAdmin
         .from('merchant_association_signatures')
         .insert({
@@ -105,7 +80,7 @@ export async function POST(request: NextRequest) {
           signature_data: signatureData,
           user_type: userType,
           vote_type: voteType || null,
-          store_info: storeInfo
+          store_info: storeInfo // 확장된 매장 정보 저장
         })
         .select('id')
         .single();

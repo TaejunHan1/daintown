@@ -1,3 +1,4 @@
+// app/auth/register/page.tsx
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
@@ -649,32 +650,39 @@ export default function Register() {
       }
   
       // 3. 프로필 정보를 직접 서버로 전송 - status를 pending으로 설정하여 관리자 승인 필요하게 함
-      try {
-        // API 방식으로 전송
-        const response = await fetch('/api/auth/register-profile', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            userId: authData.user.id,
-            fullName: fullName,
-            phoneNumber: phoneNumber,
-            businessDocUrl: businessDocUrl,
-            signatureData: signatureData,
-            verified: true, // 휴대폰 인증 완료
-            status: 'pending', // 관리자 승인 대기 상태로 설정
-          }),
-        });
+      // 프로필 정보를 직접 서버로 전송
+try {
+  // API 방식으로 전송
+  const response = await fetch('/api/auth/register-profile', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      userId: authData.user.id,
+      fullName: fullName,
+      phoneNumber: phoneNumber,
+      businessDocUrl: businessDocUrl,
+      signatureData: signatureData,
+      verified: true, // 휴대폰 인증 완료
+      status: 'pending', // 관리자 승인 대기 상태로 설정
+      userType: userType, // 사용자 유형 전달
+      selectedStoreId: selectedStore // 선택한 매장 ID 전달
+    }),
+  });
   
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || errorData.error || '프로필 정보 저장 중 오류가 발생했습니다');
-        }
-      } catch (error: any) {
-        console.error('Profile update error:', error);
-        throw new Error('프로필 정보 저장 중 오류가 발생했습니다: ' + error.message);
-      }
+  if (!response.ok) {
+    const errorData = await response.json();
+    console.error('Profile update response error:', errorData);
+    throw new Error(errorData.message || errorData.error || '프로필 정보 저장 중 오류가 발생했습니다');
+  }
+
+  const profileData = await response.json();
+  console.log('Profile update success:', profileData);
+} catch (error: any) {
+  console.error('Profile update error:', error);
+  throw new Error('프로필 정보 저장 중 오류가 발생했습니다: ' + error.message);
+}
       
       // 4. 매장-사용자 연결 정보 저장
       try {

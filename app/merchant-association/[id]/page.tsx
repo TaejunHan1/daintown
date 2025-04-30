@@ -114,135 +114,273 @@ export default function PostDetail() {
   useEffect(() => {
     if (!id) return; // id가 없으면 처리하지 않음
     
-    const checkUser = async () => {
-      try {
-        // 사용자 세션 확인
-        const { data: { session } } = await supabase.auth.getSession();
+    // checkUser 함수 - 사용자 정보 및 권한 확인
+const checkUser = async () => {
+  try {
+    if (!id) return; // id가 없으면 처리하지 않음
+    
+    // 사용자 세션 확인
+    const { data: { session } } = await supabase.auth.getSession();
 
-        if (!session?.user) {
-          // 인증되지 않은 사용자는 로그인 페이지로 리디렉션
-          router.push('/auth/login?redirect=/merchant-association');
+    if (!session?.user) {
+      // 인증되지 않은 사용자는 로그인 페이지로 리디렉션
+      router.push('/auth/login?redirect=/merchant-association');
+      return;
+    }
+
+    setUser(session.user);
+
+    // 관리자 권한 확인
+    try {
+      const response = await fetch(`/api/admin/check-role?userId=${session.user.id}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data && data.role === 'admin') {
+          setIsAdmin(true);
+        }
+      }
+    } catch (error) {
+      console.error('Error checking admin role:', error);
+    }
+
+    // 사용자 서명 데이터 가져오기
+    try {
+      const profileResponse = await fetch(`/api/profile?userId=${session.user.id}`);
+      if (profileResponse.ok) {
+        const profileData = await profileResponse.json();
+        setUserSignature(profileData.signature_data);
+      }
+    } catch (error) {
+      console.error('Error fetching user signature:', error);
+    }
+
+    // 전체 사용자 수 가져오기
+    try {
+      const countResponse = await fetch('/api/profile?countOnly=true');
+      if (countResponse.ok) {
+        const countData = await countResponse.json();
+        console.log('전체 사용자 수:', countData.count);
+        setTotalUserCount(countData.count);
+      } else {
+        console.error('전체 사용자 수 조회 오류:', await countResponse.text());
+        setTotalUserCount(0);
+      }
+    } catch (countError) {
+      console.error('전체 사용자 수 조회 중 예외 발생:', countError);
+      setTotalUserCount(0);
+    }
+
+    // 게시글 정보 가져오기 (먼저 실행)
+    await fetchPostData(session);
+
+    // 사용자의 매장 정보 가져오기
+    try {
+      console.log('사용자 매장 정보 요청 중...');
+      const storeResponse = await fetch(`/api/merchant-association/user-stores?userId=${session.user.id}`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
+        }
+      });
+      
+      if (storeResponse.ok) {
+        const storeData = await storeResponse.json();
+        console.log('매장 정보 응답:', storeData);
+        
+        if (!storeData || storeData.length === 0) {
+          console.error('매장 정보가 없습니다.');
+          setError('매장 정보를 찾을 수 없습니다.');
+          setLoading(false);
           return;
         }
-
-        setUser(session.user);
-
-        // 관리자 권한 확인
+        
+        setUserStores(storeData);
+        
+        // 사용자 유형 직접 확인 - store_users 테이블에서 실제 유형 조회
         try {
-          const response = await fetch(`/api/admin/check-role?userId=${session.user.id}`);
-          if (response.ok) {
-            const data = await response.json();
-            if (data && data.role === 'admin') {
-              setIsAdmin(true);
-            }
-          }
-        } catch (error) {
-          console.error('Error checking admin role:', error);
-        }
-
-        // 사용자 서명 데이터 가져오기
-        try {
-          const profileResponse = await fetch(`/api/profile?userId=${session.user.id}`);
-          if (profileResponse.ok) {
-            const profileData = await profileResponse.json();
-            setUserSignature(profileData.signature_data);
-          }
-        } catch (error) {
-          console.error('Error fetching user signature:', error);
-        }
-
-        // 전체 사용자 수 가져오기
-        try {
-          const countResponse = await fetch('/api/profile?countOnly=true');
-          if (countResponse.ok) {
-            const countData = await countResponse.json();
-            console.log('전체 사용자 수:', countData.count);
-            setTotalUserCount(countData.count);
-          } else {
-            console.error('전체 사용자 수 조회 오류:', await countResponse.text());
-            setTotalUserCount(0);
-          }
-        } catch (countError) {
-          console.error('전체 사용자 수 조회 중 예외 발생:', countError);
-          setTotalUserCount(0);
-        }
-
-        // 게시글 정보 가져오기 (먼저 실행)
-        await fetchPostData(session);
-
-        // 사용자의 매장 정보 가져오기
-        try {
-          console.log('사용자 매장 정보 요청 중...');
-          const storeResponse = await fetch(`/api/merchant-association/user-stores?userId=${session.user.id}`, {
-            method: 'GET',
-            headers: {
-              'Authorization': `Bearer ${session.access_token}`
-            }
-          });
+          console.log('사용자 매장 정보를 API를 통해 가져오는 중...');
+  const storeResponse = await fetch(`/api/merchant-association/user-stores?userId=${session.user.id}`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${session.access_token}`
+    }
+  });
+  
+  if (!storeResponse.ok) {
+    throw new Error(`API 응답 오류: ${await storeResponse.text()}`);
+  }
+  
+  const userStoreData = await storeResponse.json();
+            
+          // if (storeUserError) {
+          //   console.error('사용자 유형 조회 오류:', storeUserError);
+          //   throw storeUserError;
+          // }
           
-          if (storeResponse.ok) {
-            const storeData = await storeResponse.json();
-            console.log('매장 정보 응답:', storeData);
-            setUserStores(storeData);
-            
-            // 사용자 유형 설정 및 다중 역할 확인
-            if (storeData.length > 0) {
-              // 기본 유형은 첫 번째 매장의 유형
-              setUserType(storeData[0].user_type);
-              setSelectedUserType(storeData[0].user_type);
-              setSelectedStore(storeData[0].store_id);
-              
-              // 임대인과 임차인 역할을 모두 가지고 있는지 확인
-              const hasLandlordRole = storeData.some((store: StoreUser) => store.user_type === 'landlord');
-              const hasTenantRole = storeData.some((store: StoreUser) => store.user_type === 'tenant');
-              
-              if (hasLandlordRole && hasTenantRole) {
-                console.log('사용자가 임대인과 임차인 역할을 모두 가지고 있습니다.');
-                setHasMultipleRoles(true);
-              }
+          if (!userStoreData || userStoreData.length === 0) {
+            console.error('사용자 매장 연결 정보가 없습니다.');
+            throw new Error('매장 연결 정보 없음');
+          }
+          
+          console.log('조회된 실제 사용자 유형:', userStoreData);
+          
+          // 임차인/임대인 유형 분류
+          const tenantStores = userStoreData.filter(store => store.user_type === 'tenant');
+          const landlordStores = userStoreData.filter(store => store.user_type === 'landlord');
+          
+          // 사용자가 가진 실제 역할 확인
+          const hasTenantRole = tenantStores.length > 0;
+          const hasLandlordRole = landlordStores.length > 0;
+          
+          // 초기 유형 및 매장 설정 (게시글 성격에 따라 맞는 유형 우선 선택)
+          let initialUserType, initialStore;
+          
+          // 게시글이 tenant 대상이고 사용자가 tenant 역할이 있으면 tenant 선택
+          if (post?.signature_target === 'tenant' && hasTenantRole) {
+            initialUserType = 'tenant';
+            initialStore = tenantStores[0].store_id;
+          } 
+          // 게시글이 landlord 대상이고 사용자가 landlord 역할이 있으면 landlord 선택 
+          else if (post?.signature_target === 'landlord' && hasLandlordRole) {
+            initialUserType = 'landlord';
+            initialStore = landlordStores[0].store_id;
+          }
+          // 게시글이 both이거나 특정 대상이 아니면, 사용자가 가진 역할 중 하나 선택
+          else {
+            if (hasTenantRole) {
+              initialUserType = 'tenant';
+              initialStore = tenantStores[0].store_id;
+            } else if (hasLandlordRole) {
+              initialUserType = 'landlord';
+              initialStore = landlordStores[0].store_id;
+            } else {
+              throw new Error('유효한 매장 역할이 없습니다');
             }
-          } else {
-            console.error('Store response not OK:', await storeResponse.text());
+          }
+          
+          console.log(`선택된 초기 유형: ${initialUserType}, 매장: ${initialStore}`);
+          
+          setUserType(initialUserType);
+          setSelectedUserType(initialUserType);
+          setSelectedStore(initialStore);
+          
+          // 다중 역할 확인
+          setHasMultipleRoles(hasLandlordRole && hasTenantRole);
+          
+        } catch (userTypeError) {
+          console.error('사용자 유형 처리 오류:', userTypeError);
+          // 기본값 설정 (이전 응답 데이터 기반)
+          if (storeData.length > 0) {
+            const firstStore = storeData[0];
+            console.log('기본값 사용:', firstStore);
+            setUserType(firstStore.user_type);
+            setSelectedUserType(firstStore.user_type);
+            setSelectedStore(firstStore.store_id);
             
-            // 테스트용 더미 데이터 - 응답이 실패해도 UI가 작동하도록
+            // 다중 역할 확인 - 기본 방식으로
+            const hasLandlord = storeData.some((store: StoreUser) => store.user_type === 'landlord');
+            const hasTenant = storeData.some((store: StoreUser) => store.user_type === 'tenant');
+            setHasMultipleRoles(hasLandlord && hasTenant);
+          } else {
+            // 기본 테스트 데이터 설정
+            console.log('매장 정보 없음, 기본 테스트 데이터 사용');
             setUserStores([
               {
                 user_id: session.user.id,
                 user_type: 'tenant',
                 store_id: '00000000-0000-0000-0000-000000000001',
-                store_name: '테스트 매장'
+                store_name: '임차인 매장'
               }
             ]);
             setUserType('tenant');
             setSelectedUserType('tenant');
             setSelectedStore('00000000-0000-0000-0000-000000000001');
           }
-        } catch (storeError) {
-          console.error('Error fetching user stores:', storeError);
-          // 테스트용 더미 데이터
-          setUserStores([
-            {
-              user_id: session.user.id,
-              user_type: 'tenant',
-              store_id: '00000000-0000-0000-0000-000000000001',
-              store_name: '테스트 매장'
-            }
-          ]);
-          setUserType('tenant');
-          setSelectedUserType('tenant');
-          setSelectedStore('00000000-0000-0000-0000-000000000001');
         }
-      } catch (error) {
-        console.error('Error in checkUser:', error);
-        setLoading(false);
+      } else {
+        console.error('Store response not OK:', await storeResponse.text());
+        
+        // API 실패 시 fallback - 직접 DB에 쿼리 시도
+        try {
+          const { data: storeUsers, error: suError } = await supabase
+            .from('store_users')
+            .select('store_id, user_type')
+            .eq('user_id', session.user.id);
+            
+          if (!suError && storeUsers && storeUsers.length > 0) {
+            // 임차인 역할 우선 찾기
+            const tenantUser = storeUsers.find(su => su.user_type === 'tenant');
+            const defaultType = tenantUser ? 'tenant' : 'landlord';
+            const defaultStore = tenantUser || storeUsers[0];
+            
+            console.log('직접 쿼리로 사용자 유형 확인:', defaultType);
+            
+            // 기본 매장 정보 설정
+            setUserStores(storeUsers.map(su => ({
+              user_id: session.user.id,
+              user_type: su.user_type,
+              store_id: su.store_id,
+              store_name: `${su.user_type === 'landlord' ? '임대인' : '임차인'} 매장`
+            })));
+            
+            setUserType(defaultType);
+            setSelectedUserType(defaultType);
+            setSelectedStore(defaultStore.store_id);
+            
+            // 다중 역할 확인
+            const hasLandlord = storeUsers.some(su => su.user_type === 'landlord');
+            const hasTenant = storeUsers.some(su => su.user_type === 'tenant');
+            setHasMultipleRoles(hasLandlord && hasTenant);
+            
+            return;
+          }
+        } catch (dbError) {
+          console.error('Direct DB query error:', dbError);
+        }
+        
+        // 모든 조회 실패 시 기본 테스트 데이터
+        console.log('모든 시도 실패, 기본 테스트 데이터 사용 (임차인으로 설정)');
+        setUserStores([
+          {
+            user_id: session.user.id,
+            user_type: 'tenant',
+            store_id: '00000000-0000-0000-0000-000000000001',
+            store_name: '임차인 매장'
+          }
+        ]);
+        setUserType('tenant');
+        setSelectedUserType('tenant');
+        setSelectedStore('00000000-0000-0000-0000-000000000001');
       }
-    };
+    } catch (storeError) {
+      console.error('Error fetching user stores:', storeError);
+      
+      // 예외 발생 시 기본 테스트 데이터
+      console.log('예외 발생, 기본 테스트 데이터 사용 (임차인으로 설정)');
+      setUserStores([
+        {
+          user_id: session.user.id,
+          user_type: 'tenant',
+          store_id: '00000000-0000-0000-0000-000000000001',
+          store_name: '임차인 매장'
+        }
+      ]);
+      setUserType('tenant');
+      setSelectedUserType('tenant');
+      setSelectedStore('00000000-0000-0000-0000-000000000001');
+    }
+  } catch (error) {
+    console.error('Error in checkUser:', error);
+    setLoading(false);
+  }
+};
 
     checkUser();
   }, [id, router]);
 
   // 드롭다운 외부 클릭 감지
   useEffect(() => {
+
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
       
@@ -509,7 +647,14 @@ export default function PostDetail() {
       setError('마감된 게시글에는 서명할 수 없습니다.');
       return;
     }
-
+  
+    // 서명 대상 확인
+    if (post?.signature_target !== 'both' && 
+        post?.signature_target !== selectedUserType) {
+          setError(`이 게시글은 ${getSignatureTargetText(post?.signature_target ?? null)}만 서명할 수 있습니다.`);
+          return;
+    }
+  
     try {
       setError(null);
       const { data: { session } } = await supabase.auth.getSession();
@@ -517,8 +662,10 @@ export default function PostDetail() {
         setError('로그인 세션이 만료되었습니다. 다시 로그인해주세요.');
         return;
       }
-
+  
       console.log('서명 제출 시도 중...');
+      console.log('사용자 유형:', selectedUserType);
+      console.log('게시글 대상:', post?.signature_target);
       
       // 현재 선택된 매장 정보 찾기
       const selectedStoreInfo = userStores.find(store => store.store_id === selectedStore);
@@ -527,7 +674,7 @@ export default function PostDetail() {
       const endpoint = isEditing ? 
         '/api/merchant-association/signature/update' : 
         '/api/merchant-association/signature';
-
+  
       const requestBody: Record<string, any> = {
         postId: id,
         userId: user.id,
@@ -546,14 +693,14 @@ export default function PostDetail() {
           unit_number: ''
         }
       };
-
+  
       console.log('서명 요청 데이터:', requestBody);
-
+  
       // 서명 수정인 경우 서명 ID 추가
       if (isEditing && userCurrentSignature) {
         requestBody.signatureId = userCurrentSignature.id;
       }
-
+  
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
@@ -562,7 +709,7 @@ export default function PostDetail() {
         },
         body: JSON.stringify(requestBody),
       });
-
+  
       if (!response.ok) {
         const errorText = await response.text();
         console.error('Signature submission error:', errorText);
@@ -585,11 +732,11 @@ export default function PostDetail() {
         setError(errorMessage);
         return;
       }
-
+  
       // 응답 데이터 확인
       const responseData = await response.json();
       console.log('서명 응답 데이터:', responseData);
-
+  
       // 성공 후 데이터 새로고침
       console.log('서명 성공, 데이터 새로고침 중...');
       const { data: { session: newSession } } = await supabase.auth.getSession();
@@ -765,23 +912,29 @@ export default function PostDetail() {
     }
   };
 
-  // 사용자가 서명할 수 있는지 확인
-  const canUserSign = () => {
-    if (!post || !post.signature_required || !selectedUserType) return false;
-    
-    // 마감된 경우 서명 불가
-    if (isExpired) return false;
-    
-    // 편집 모드이거나 아직 서명하지 않은 경우에만
-    if (!isEditing && hasUserSigned) return false;
-    
-    // 서명 대상에 따라 서명 가능 여부 결정
-    return (
-      post.signature_target === 'both' ||
-      (post.signature_target === 'landlord' && selectedUserType === 'landlord') ||
-      (post.signature_target === 'tenant' && selectedUserType === 'tenant')
-    );
-  };
+// 사용자가 서명할 수 있는지 확인
+const canUserSign = () => {
+  if (!post || !post.signature_required || !selectedUserType) return false;
+  
+  // 마감된 경우 서명 불가
+  if (isExpired) return false;
+  
+  // 편집 모드이거나 아직 서명하지 않은 경우에만
+  if (!isEditing && hasUserSigned) return false;
+  
+  // 서명 대상에 따라 서명 가능 여부 결정
+  // 조건문 로직 확인하며 로그 남기기
+  console.log(`서명 조건 확인 - 게시글 대상: ${post.signature_target}, 사용자 유형: ${selectedUserType}`);
+  
+  const isAllowed = (
+    post.signature_target === 'both' ||
+    (post.signature_target === 'landlord' && selectedUserType === 'landlord') ||
+    (post.signature_target === 'tenant' && selectedUserType === 'tenant')
+  );
+  
+  console.log(`서명 가능 여부: ${isAllowed}`);
+  return isAllowed;
+};
   
   // 서명이 공개되는지 확인 - 수정된 부분
   const isSignaturePublic = (signature: Signature) => {
@@ -1272,112 +1425,131 @@ export default function PostDetail() {
                       </div>
                       
                       {/* 서명 테이블 */}
-                      <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200">
-                          <thead className="bg-gray-50">
-                            <tr>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                서명자
-                              </th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                매장명
-                              </th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                유형
-                              </th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                의견
-                              </th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                서명일
-                              </th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                서명
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody className="bg-white divide-y divide-gray-200">
-                            {getFilteredSignatures().map((signature) => {
-                              const isPublic = isSignaturePublic(signature);
-                              const storeInfo = typeof signature.store_info === 'string' 
-                                ? JSON.parse(signature.store_info) 
-                                : signature.store_info || {};
-                              const isCurrentUser = user && signature.user_id === user.id;
-                              
-                              return (
-                                <tr 
-                                  key={signature.id}
-                                  className={`hover:bg-gray-50 ${isCurrentUser ? 'bg-blue-50' : ''}`}
-                                >
-                                  <td className="px-4 py-3 whitespace-nowrap">
-                                    <div className="flex items-center">
-                                      {isCurrentUser && (
-                                        <span className="flex-shrink-0 w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
-                                      )}
-                                      <div className="text-sm font-medium text-gray-900">
-                                        {signature.user_name || '사용자'}
-                                      </div>
-                                    </div>
-                                  </td>
-                                  <td className="px-4 py-3 whitespace-nowrap">
-                                    <div className="text-sm text-gray-900">
-                                      {storeInfo.store_name || `${getUserTypeText(signature.user_type)} 매장`}
-                                    </div>
-                                    {isPublic && storeInfo.floor && storeInfo.unit_number && (
-                                      <div className="text-xs text-gray-500">
-                                        {storeInfo.floor} {storeInfo.unit_number}
-                                      </div>
-                                    )}
-                                  </td>
-                                  <td className="px-4 py-3 whitespace-nowrap">
-                                    <span className="text-sm text-gray-900">
-                                      {getUserTypeText(signature.user_type)}
-                                    </span>
-                                  </td>
-                                  <td className="px-4 py-3 whitespace-nowrap">
-                                    {isPublic ? (
-                                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                        signature.vote_type === 'approve' 
-                                          ? 'bg-green-100 text-green-800' 
-                                          : 'bg-red-100 text-red-800'
-                                      }`}>
-                                        {signature.vote_type === 'approve' ? '찬성' : '반대'}
-                                      </span>
-                                    ) : (
-                                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                                        </svg>
-                                        비공개
-                                      </span>
-                                    )}
-                                  </td>
-                                  <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
-                                    {formatDate(signature.created_at)}
-                                  </td>
-                                  <td className="px-4 py-3 whitespace-nowrap">
-                                    {isPublic ? (
-                                      <div className="w-20 h-10 flex items-center justify-center border rounded bg-white">
-                                        <img 
-                                          src={signature.signature_data} 
-                                          alt="서명" 
-                                          className="h-8 object-contain max-w-full"
-                                        />
-                                      </div>
-                                    ) : (
-                                      <div className="w-20 h-10 flex items-center justify-center border rounded bg-white text-gray-400">
-                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                                        </svg>
-                                      </div>
-                                    )}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
+<div className="overflow-x-auto">
+  <table className="min-w-full divide-y divide-gray-200">
+    <thead className="bg-gray-50">
+      <tr>
+        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+          서명자
+        </th>
+        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+          매장명
+        </th>
+        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+          유형
+        </th>
+        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+          의견
+        </th>
+        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+          서명일
+        </th>
+        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+          서명
+        </th>
+      </tr>
+    </thead>
+    <tbody className="bg-white divide-y divide-gray-200">
+      {getFilteredSignatures().map((signature) => {
+        const isPublic = isSignaturePublic(signature);
+        
+        // store_info 처리 개선
+        let storeInfo = signature.store_info;
+        if (typeof storeInfo === 'string') {
+          try {
+            storeInfo = JSON.parse(storeInfo);
+          } catch (e) {
+            console.error(`서명 ID ${signature.id}의 매장 정보 파싱 실패:`, e);
+            storeInfo = {
+              store_name: `${signature.user_type === 'landlord' ? '임대인' : '임차인'} 매장`,
+              floor: '',
+              unit_number: ''
+            };
+          }
+        } else if (!storeInfo || Object.keys(storeInfo).length === 0) {
+          storeInfo = {
+            store_name: `${signature.user_type === 'landlord' ? '임대인' : '임차인'} 매장`,
+            floor: '',
+            unit_number: ''
+          };
+        }
+        
+        const isCurrentUser = user && signature.user_id === user.id;
+        
+        return (
+          <tr 
+            key={signature.id}
+            className={`hover:bg-gray-50 ${isCurrentUser ? 'bg-blue-50' : ''}`}
+          >
+            <td className="px-4 py-3 whitespace-nowrap">
+              <div className="flex items-center">
+                {isCurrentUser && (
+                  <span className="flex-shrink-0 w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
+                )}
+                <div className="text-sm font-medium text-gray-900">
+                  {signature.user_name || '사용자'}
+                </div>
+              </div>
+            </td>
+            <td className="px-4 py-3 whitespace-nowrap">
+              <div className="text-sm text-gray-900">
+                {storeInfo.store_name || `${getUserTypeText(signature.user_type)} 매장`}
+              </div>
+              {isPublic && storeInfo.floor && storeInfo.unit_number && (
+                <div className="text-xs text-gray-500">
+                  {storeInfo.floor} {storeInfo.unit_number}
+                </div>
+              )}
+            </td>
+            <td className="px-4 py-3 whitespace-nowrap">
+              <span className="text-sm text-gray-900">
+                {getUserTypeText(signature.user_type)}
+              </span>
+            </td>
+            <td className="px-4 py-3 whitespace-nowrap">
+              {isPublic ? (
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                  signature.vote_type === 'approve' 
+                    ? 'bg-green-100 text-green-800' 
+                    : 'bg-red-100 text-red-800'
+                }`}>
+                  {signature.vote_type === 'approve' ? '찬성' : '반대'}
+                </span>
+              ) : (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                  비공개
+                </span>
+              )}
+            </td>
+            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+              {formatDate(signature.created_at)}
+            </td>
+            <td className="px-4 py-3 whitespace-nowrap">
+              {isPublic ? (
+                <div className="w-20 h-10 flex items-center justify-center border rounded bg-white">
+                  <img 
+                    src={signature.signature_data} 
+                    alt="서명" 
+                    className="h-8 object-contain max-w-full"
+                  />
+                </div>
+              ) : (
+                <div className="w-20 h-10 flex items-center justify-center border rounded bg-white text-gray-400">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                </div>
+              )}
+            </td>
+          </tr>
+        );
+      })}
+    </tbody>
+  </table>
+</div>
                       
                       {/* 검색 결과가 없는 경우 */}
                       {getFilteredSignatures().length === 0 && (

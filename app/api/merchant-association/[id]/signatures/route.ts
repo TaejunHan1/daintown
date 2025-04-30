@@ -28,8 +28,7 @@ export async function GET(
 
   try {
     // Next.js 경고 수정을 위해 디스트럭처링 사용
-    const { id } = params;
-    
+    const id = params.id;    
     console.log('요청된 게시글 ID:', id);
     
     if (!id) {
@@ -191,70 +190,60 @@ const { data: storeUsers, error: storeUsersError } = await supabaseAdmin.rpc(
       
       // 6. 최종 서명 데이터 생성
       console.log('5. 최종 서명 데이터 생성 시작...');
-      const formattedSignatures = signatures.map((signature: any) => {
-        const userName = userMap.get(signature.user_id) || '사용자';
-        let storeInfo = signature.store_info;
-        
-        // 기존 store_info 처리
-        if (typeof storeInfo === 'string') {
-          try {
-            storeInfo = JSON.parse(storeInfo);
-            console.log(`5-1. 서명 ID ${signature.id}의 store_info 문자열 파싱 성공`);
-          } catch (e) {
-            console.error(`5-1-1. 서명 ID ${signature.id}의 store_info 문자열 파싱 실패:`, e);
-            storeInfo = null;
-          }
-        }
-        
-        // 사용자의 매장 정보가 있으면 사용
-        if (userStoreMap.has(signature.user_id)) {
-          const userStores = userStoreMap.get(signature.user_id);
-          // 같은 유형의 매장 찾기
-          const matchingStore = userStores.find((us: any) => us.user_type === signature.user_type);
-          
-          if (matchingStore && storeMap.has(matchingStore.store_id)) {
-            console.log(`5-2. 서명 ID ${signature.id}: 매칭되는 매장 정보 발견 (ID: ${matchingStore.store_id})`);
-            storeInfo = storeMap.get(matchingStore.store_id);
-          } else {
-            console.log(`5-2-1. 서명 ID ${signature.id}: 같은 유형의 매장 정보를 찾지 못함`);
-          }
-        } else {
-          console.log(`5-2-2. 서명 ID ${signature.id}: 사용자 ID ${signature.user_id}에 대한 매장 정보 없음`);
-        }
-        
-        // 매장 정보가 없으면 기본값 설정
-        if (!storeInfo) {
-          console.log(`5-3. 서명 ID ${signature.id}: 기본 매장 정보 생성`);
-          storeInfo = {
-            store_id: '00000000-0000-0000-0000-000000000001',
-            store_name: `${signature.user_type === 'landlord' ? '임대인' : '임차인'} 매장`,
-            floor: '',
-            unit_number: ''
-          };
-        }
-        
-        // 필요한 필드 확인 및 보완
-        if (!storeInfo.store_id) {
-          storeInfo.store_id = '00000000-0000-0000-0000-000000000001';
-        }
-        if (!storeInfo.store_name) {
-          storeInfo.store_name = `${signature.user_type === 'landlord' ? '임대인' : '임차인'} 매장`;
-        }
-        if (!storeInfo.floor) {
-          storeInfo.floor = '';
-        }
-        if (!storeInfo.unit_number) {
-          storeInfo.unit_number = '';
-        }
-        
-        console.log(`5-4. 서명 ID ${signature.id}의 최종 매장 정보:`, storeInfo);
-        
-        return {
-          ...signature,
-          user_name: userName,
-          store_info: storeInfo
-        };
-      });
+      // 각 서명의 store_info 처리 로직 부분 (수정된 코드)
+const formattedSignatures = signatures.map((signature: any) => {
+  const userName = userMap.get(signature.user_id) || '사용자';
+  let storeInfo = signature.store_info;
+  
+  // 기존 store_info 처리
+  if (typeof storeInfo === 'string') {
+    try {
+      storeInfo = JSON.parse(storeInfo);
+      console.log(`5-1. 서명 ID ${signature.id}의 store_info 문자열 파싱 성공`);
+    } catch (e) {
+      console.error(`5-1-1. 서명 ID ${signature.id}의 store_info 문자열 파싱 실패:`, e);
+      storeInfo = null;
+    }
+  }
+  
+  // 매장 정보가 없거나 필수 필드가 누락된 경우 기본값 설정
+  if (!storeInfo || !storeInfo.store_name) {
+    console.log(`5-3. 서명 ID ${signature.id}: 기본 매장 정보 생성`);
+    storeInfo = {
+      store_id: '00000000-0000-0000-0000-000000000001',
+      store_name: `${signature.user_type === 'landlord' ? '임대인' : '임차인'} 매장`,
+      floor: signature.user_type === 'landlord' ? 'ALL' : '1F',
+      unit_number: signature.user_type === 'landlord' ? 'ALL' : '101',
+      user_type: signature.user_type // 유형 정보 추가
+    };
+  }
+  
+  // 필수 필드 확인 및 보완
+  if (!storeInfo.store_id) {
+    storeInfo.store_id = '00000000-0000-0000-0000-000000000001';
+  }
+  if (!storeInfo.store_name) {
+    storeInfo.store_name = `${signature.user_type === 'landlord' ? '임대인' : '임차인'} 매장`;
+  }
+  if (!storeInfo.floor) {
+    storeInfo.floor = signature.user_type === 'landlord' ? 'ALL' : '1F';
+  }
+  if (!storeInfo.unit_number) {
+    storeInfo.unit_number = signature.user_type === 'landlord' ? 'ALL' : '101';
+  }
+  // user_type 정보 추가 (없는 경우)
+  if (!storeInfo.user_type) {
+    storeInfo.user_type = signature.user_type;
+  }
+  
+  console.log(`5-4. 서명 ID ${signature.id}의 최종 매장 정보:`, storeInfo);
+  
+  return {
+    ...signature,
+    user_name: userName,
+    store_info: storeInfo
+  };
+});
       
       console.log('5-5. 모든 서명 데이터 처리 완료. 반환 개수:', formattedSignatures.length);
       console.log('========== API 요청 완료: 성공 ==========');
