@@ -225,8 +225,8 @@ const checkUser = async () => {
           console.log('조회된 실제 사용자 유형:', userStoreData);
           
           // 임차인/임대인 유형 분류
-          const tenantStores = userStoreData.filter(store => store.user_type === 'tenant');
-          const landlordStores = userStoreData.filter(store => store.user_type === 'landlord');
+          const tenantStores = userStoreData.filter((store : any) => store.user_type === 'tenant');
+          const landlordStores = userStoreData.filter((store : any) => store.user_type === 'landlord');
           
           // 사용자가 가진 실제 역할 확인
           const hasTenantRole = tenantStores.length > 0;
